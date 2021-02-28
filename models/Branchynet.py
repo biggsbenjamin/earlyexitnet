@@ -38,6 +38,14 @@ class Branchynet(nn.Module):
         self.backbone = nn.ModuleList()
         self.exits = nn.ModuleList()
 
+        self.chansIn = [5,10]
+        self.chansOut = [10,20]
+
+        #weight initialisiation - for standard layers this is done automagically
+        self._build_backbone()
+        self._build_exits()
+
+    def _build_backbone(self):
         #Starting conv2d layer
         self.backbone.append(nn.Conv2d(1, 5, kernel_size=5, stride=1, padding=3))
 
@@ -49,10 +57,7 @@ class Branchynet(nn.Module):
         #strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=3)
         #self.backbone.append(strt_bl)
 
-
         #adding ConvPoolAc blocks - remaining backbone
-        self.chansIn = [5,10]
-        self.chansOut = [10,20]
         bb_layers = [post_exit] #include post exit 1 layers
         #bb_layers = []
         for cI, cO in zip(self.chansIn, self.chansOut): #TODO make input variable
@@ -65,6 +70,7 @@ class Branchynet(nn.Module):
         remaining_backbone_layers = nn.Sequential(*bb_layers)
         self.backbone.append(remaining_backbone_layers)
 
+    def _build_exits(self):
         #adding early exits/branches
 
         #early exit 1
@@ -83,8 +89,6 @@ class Branchynet(nn.Module):
             nn.Linear(84,10)
         )
         self.exits.append(eeF)
-
-        #weight initialisiation - for standard layers this is done automagically
 
     def exit_criterion(self, x): #not for batches atm
         #evaluate the exit criterion on the result provided
