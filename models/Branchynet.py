@@ -10,7 +10,8 @@ class ConvPoolAc(nn.Module):
         super(ConvPoolAc, self).__init__()
 
         self.layer = nn.Sequential(
-            nn.Conv2d(chanIn, chanOut, kernel_size=kernel, stride=stride, padding=padding, bias=False),
+            nn.Conv2d(chanIn, chanOut, kernel_size=kernel,
+                stride=stride, padding=padding, bias=False),
             nn.MaxPool2d(2, stride=2, ceil_mode=p_ceil_mode), #ksize, stride
             nn.ReLU(True)
         )

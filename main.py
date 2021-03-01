@@ -43,6 +43,9 @@ def train_backbone(model, train_dl, valid_dl, save_path, epochs=50,
     #probe params to double check only backbone run
     #probe_params(model) #satisfied that setting specific params works right
 
+    #timestamp = dt.now().strftime("%Y-%m-%d_%H%M%S")
+    #bb_folder_path = 'backbone-' + timestamp
+
     for epoch in range(epochs):
         model.train()
         print("Starting epoch:", epoch+1, end="... ", flush=True)
@@ -70,7 +73,7 @@ def train_backbone(model, train_dl, valid_dl, save_path, epochs=50,
 
         print("V Loss:", valid_losses[-1] / len(valid_dl))
         #probe_params(model)
-        save_model(model, save_path, opt=opt)
+        save_model(model, save_path, file_prefix='backbone', opt=opt)
 
     return #something trained
 
@@ -81,44 +84,68 @@ def train_exits(model, epochs=100):
     #exponetial decay rates for 1st & 2nd moment: 0.99, 0.999
     return #something trained
 
-def train_joint(model, backbone_epochs=50, pretrain_backbone=True):
+def train_joint(model, train_dl, valid_dl, save_path, opt=None,
+                loss_f=nn.CrossEntropyLoss(), backbone_epochs=50,
+                joint_epochs=100, pretrain_backbone=True):
+
+    timestamp = dt.now().strftime("%Y-%m-%d_%H%M%S")
 
     if pretrain_backbone:
         print("PRETRAINING BACKBONE FROM SCRATCH")
-        #train network backbone
-        train_backbone(model, epochs=backbone_epochs)
+        folder_path = 'pre_Trn_bb_' + timestamp
+        train_backbone(model, train_dl, valid_dl, os.path.join(save_path, folder_path),
+                epochs=backbone_epochs, loss_f=loss_f)
+        #train_backbone(model, save_path, epochs=backbone_epochs)
 
         #train the rest...
+        print("JOINT TRAINING WITH PRETRAINED BACKBONE")
+
+        prefix = 'pretrn-joint'
     else:
         #jointly trains backbone and exits from scratch
         print("JOINT TRAINING FROM SCRATCH")
-        for epoch in range(epochs):
-            model.train()
-            print("starting epoch:", epoch+1, end="... ", flush=true)
+        folder_path = 'jnt_fr_scrcth' + timestamp
+        prefix = 'joint'
 
-            #training loop
-            for xb, yb in train_dl:
-                results = model(xb)
+    spth = os.path.join(save_path, folder_path)
 
-                loss = 0.0
-                for res in results:
-                    loss += loss_f(res, yb)
 
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
+    #set up the joint optimiser
+    if opt is None: #TODO separate optim function to reduce code, maybe pass params?
+        #set to branchynet default
+        #Adam algo - step size alpha=0.001
+        lr = 0.001
+        #exponetial decay rates for 1st & 2nd moment: 0.99, 0.999
+        exp_decay_rates = [0.99, 0.999]
 
-            #validation
-            model.eval()
-            with torch.no_grad():
-                valid_losses = np.sum(np.array(
-                        [[loss_f(exit, yb) for exit in model(xb)]
-                            for xb, yb in valid_dl]), axis=0)
+        opt = optim.Adam(model.parameters(), betas=exp_decay_rates, lr=lr)
 
-            print("v loss:", valid_losses / len(valid_dl))
+    for epoch in range(joint_epochs):
+        model.train()
+        print("starting epoch:", epoch+1, end="... ", flush=True)
 
-    #Adam algo - step size alpha=0.001
-    #exponetial decay rates for 1st & 2nd moment: 0.99, 0.999
+        #training loop
+        for xb, yb in train_dl:
+            results = model(xb)
+
+            loss = 0.0
+            for res in results:
+                loss += loss_f(res, yb)
+
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+
+        #validation
+        model.eval()
+        with torch.no_grad():
+            valid_losses = np.sum(np.array(
+                    [[loss_f(exit, yb) for exit in model(xb)]
+                        for xb, yb in valid_dl]), axis=0)
+
+        print("v loss:", valid_losses / len(valid_dl))
+        save_model(model, spth, file_prefix=prefix, opt=opt)
+
     return #something trained
 
 def test():
@@ -140,11 +167,11 @@ def pull_mnist_data(batch_size=64):
 
     return mnist_train_dl, mnist_valid_dl
 
-def save_model(model, path, seed=None, epoch=None, opt=None, loss=None):
+def save_model(model, path, file_prefix='', seed=None, epoch=None, opt=None, loss=None):
     #TODO add saving for inference only
     #saves the model in pytorch format to the path specified
     timestamp = dt.now().strftime("%Y-%m-%d_%H%M%S")
-    filenm = 'backbone-' + timestamp
+    filenm = file_prefix + '-' + timestamp
     save_dict ={'timestamp': timestamp,
                 'model_state_dict': model.state_dict()
                 }
@@ -159,8 +186,13 @@ def save_model(model, path, seed=None, epoch=None, opt=None, loss=None):
     if loss is not None:
         save_dict['loss'] = loss
 
+
+    if not os.path.exists(path):
+        os.makedirs(path)
+
     filenm += '.pth'
     file_path = os.path.join(path, filenm)
+
     torch.save(save_dict, file_path)
 
     print("Saved to:", file_path)
@@ -192,6 +224,62 @@ def shape_test(model, dims_in, dims_out, loss_function=nn.CrossEntropyLoss()):
             losses = [loss_function(results, rand_out)]
     return losses
 
+# Our drawing graph functions. We rely / have borrowed from the following
+# python libraries:
+# https://github.com/szagoruyko/pytorchviz/blob/master/torchviz/dot.py
+# https://github.com/willmcgugan/rich
+# https://graphviz.readthedocs.io/en/stable/
+def draw_graph(start, watch=[]):
+    from graphviz import Digraph    node_attr = dict(style='filled',
+                    shape='box',
+                    align='left',
+                    fontsize='12',
+                    ranksep='0.1',
+                    height='0.2')
+    graph = Digraph(node_attr=node_attr, graph_attr=dict(size="12,12"))    assert(hasattr(start, "grad_fn"))
+    if start.grad_fn is not None:
+        _draw_graph(loss.grad_fn, graph, watch=watching)    size_per_element = 0.15
+    min_size = 12    # Get the approximate number of nodes and edges
+    num_rows = len(graph.body)
+    content_size = num_rows * size_per_element
+    size = max(min_size, content_size)
+    size_str = str(size) + "," + str(size)
+    graph.graph_attr.update(size=size_str)
+    graph.render(filename='net_graph.jpg')
+
+def _draw_graph(var, graph, watch=[], seen=[], indent="", pobj=None):
+    ''' recursive function going through the hierarchical graph printing off
+    what we need to see what autograd is doing.'''
+    from rich import print    if hasattr(var, "next_functions"):
+        for fun in var.next_functions:
+            joy = fun[0]
+            if joy is not None:
+                if joy not in seen:
+                    label = str(type(joy)).replace(
+                        "class", "").replace("'", "").replace(" ", "")
+                    label_graph = label
+                    colour_graph = ""
+                    seen.append(joy)                    if hasattr(joy, 'variable'):
+                        happy = joy.variable
+                        if happy.is_leaf:
+                            label += " \U0001F343"
+                            colour_graph = "green"                            for (name, obj) in watch:
+                                if obj is happy:
+                                    label += " \U000023E9 " + \
+                                        "[b][u][color=#FF00FF]" + name + \
+                                        "[/color][/u][/b]"
+                                    label_graph += name                                    colour_graph = "blue"
+                                    break                            vv = [str(obj.shape[x])
+                                for x in range(len(obj.shape))]
+                            label += " [["
+                            label += ', '.join(vv)
+                            label += "]]"
+                            label += " " + str(happy.var())                    graph.node(str(joy), label_graph, fillcolor=colour_graph)
+                    print(indent + label)
+                    _draw_graph(joy, graph, watch, seen, indent + ".", joy)
+                    if pobj is not None:
+                        graph.edge(str(pobj), str(joy))
+
 def main():
     #set up the model
     model = Branchynet()
@@ -216,13 +304,16 @@ def main():
     #print(shape_test(model, [1,28,28], [1])) #output is not one hot encoded
 
     #start training loop for epochs - at some point add recording points here
-    epochs = 10 #50 for backbone, 100 for joint with exits
+    epochs = 2 #50 for backbone, 100 for joint with exits
 
-    path_str = 'outputs/backbone/'
+    path_str = 'outputs/'
     if not os.path.exists(path_str):
         os.makedirs(path_str)
-    train_backbone(model, train_dl, valid_dl, path_str, epochs=epochs, loss_f=loss_f)
 
+    #train_backbone(model, train_dl, valid_dl, path_str, epochs=epochs, loss_f=loss_f)
+
+    #train_joint(model, train_dl, valid_dl, path_str, backbone_epochs=epochs,
+    #        joint_epochs=epochs, loss_f=loss_f, pretrain_backbone=True)
 
     #once trained, run it on the test data
     #be nice to have comparison against pytorch pretrained LeNet from pytorch
