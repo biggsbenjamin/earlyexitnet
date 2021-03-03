@@ -38,6 +38,7 @@ class Branchynet(nn.Module):
 
         self.backbone = nn.ModuleList()
         self.exits = nn.ModuleList()
+        self.exit_loss_weights = [1.0, 0.3] #weighting for each exit when summing loss
 
         self.chansIn = [5,10]
         self.chansOut = [10,20]

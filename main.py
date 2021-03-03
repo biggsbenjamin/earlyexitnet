@@ -15,15 +15,6 @@ import os
 import numpy as np
 from datetime import datetime as dt
 
-def probe_params(model):
-    #probe params to double check only backbone run
-    print("backbone 1st conv")
-    print([param for param in model.backbone[0].parameters()])
-    print("backbone last linear")
-    print([param for param in model.exits[-1].parameters()])
-    print("exit 1")
-    print([param for param in model.exits[0].parameters()])
-
 #TODO might merge exit+backbone for code reuse
 def train_backbone(model, train_dl, valid_dl, save_path, epochs=50,
                     loss_f=nn.CrossEntropyLoss(), opt=None):
@@ -97,8 +88,6 @@ def train_joint(model, train_dl, valid_dl, save_path, opt=None,
         folder_path = 'pre_Trn_bb_' + timestamp
         train_backbone(model, train_dl, valid_dl, os.path.join(save_path, folder_path),
                 epochs=backbone_epochs, loss_f=loss_f)
-        #train_backbone(model, save_path, epochs=backbone_epochs)
-
         #train the rest...
         print("JOINT TRAINING WITH PRETRAINED BACKBONE")
 
@@ -111,12 +100,10 @@ def train_joint(model, train_dl, valid_dl, save_path, opt=None,
 
     spth = os.path.join(save_path, folder_path)
 
-
     #set up the joint optimiser
     if opt is None: #TODO separate optim function to reduce code, maybe pass params?
         #set to branchynet default
-        #Adam algo - step size alpha=0.001
-        lr = 0.001
+        lr = 0.001 #Adam algo - step size alpha=0.001
         #exponetial decay rates for 1st & 2nd moment: 0.99, 0.999
         exp_decay_rates = [0.99, 0.999]
 
@@ -130,12 +117,15 @@ def train_joint(model, train_dl, valid_dl, save_path, opt=None,
         for xb, yb in train_dl:
             results = model(xb)
 
-            loss = 0.0
-            for res in results:
-                loss += loss_f(res, yb)
+            losses = [weighting * loss_f(res, yb)
+                        for weighting, res in zip(model.exit_loss_weights,results)]
 
             opt.zero_grad()
-            loss.backward()
+            #backward
+            for loss in losses[:-1]:
+                loss.backward(retain_graph=True)
+            losses[-1].backward()
+
             opt.step()
 
         #validation
@@ -188,7 +178,6 @@ def save_model(model, path, file_prefix='', seed=None, epoch=None, opt=None, los
     if loss is not None:
         save_dict['loss'] = loss
 
-
     if not os.path.exists(path):
         os.makedirs(path)
 
@@ -212,91 +201,8 @@ def load_model(model, path):
     #epoch = checkpoint['epoch']
     #loss = checkpoint['loss']
 
-
-def shape_test(model, dims_in, dims_out, loss_function=nn.CrossEntropyLoss()):
-    rand_in = torch.rand(tuple([1, *dims_in]))
-    rand_out = torch.rand(tuple([*dims_out])).long()
-
-    model.eval()
-    with torch.no_grad():
-        results = model(rand_in)
-        if isinstance(results, list):
-            losses = [loss_function(res, rand_out) for res in results ]
-        else:
-            losses = [loss_function(results, rand_out)]
-    return losses
-
-# Our drawing graph functions. We rely / have borrowed from the following
-# python libraries:
-# https://github.com/szagoruyko/pytorchviz/blob/master/torchviz/dot.py
-# https://github.com/willmcgugan/rich
-# https://graphviz.readthedocs.io/en/stable/
-def draw_graph(start, watch=[]):
-    from graphviz import Digraph
-    node_attr = dict(style='filled',
-                    shape='box',
-                    align='left',
-                    fontsize='12',
-                    ranksep='0.1',
-                    height='0.2')
-    graph = Digraph(node_attr=node_attr, graph_attr=dict(size="12,12"))
-    assert(hasattr(start, "grad_fn"))
-    if start.grad_fn is not None:
-        label = str(type(start.grad_fn)).replace("class", "").replace("'", "").replace(" ", "")
-        print(label) #missing first item
-        graph.node(label, str(start.grad_fn), fillcolor='red')
-
-        _draw_graph(start.grad_fn, graph, watch=watch, pobj=label)#str(start.grad_fn))
-        size_per_element = 0.15
-    min_size = 12    # Get the approximate number of nodes and edges
-    num_rows = len(graph.body)
-    content_size = num_rows * size_per_element
-    size = max(min_size, content_size)
-    size_str = str(size) + "," + str(size)
-    graph.graph_attr.update(size=size_str)
-    graph.render(filename='net_graph.jpg')
-
-def _draw_graph(var, graph, watch=[], seen=[], indent=".", pobj=None):
-    ''' recursive function going through the hierarchical graph printing off
-    what we need to see what autograd is doing.'''
-    from rich import print
-    if hasattr(var, "next_functions"):
-        for fun in var.next_functions:
-            joy = fun[0]
-            if joy is not None:
-                #if joy not in seen:
-
-                label = str(type(joy)).replace("class", "").replace("'", "").replace(" ", "")
-                label_graph = label
-                colour_graph = ""
-                seen.append(joy)
-                if hasattr(joy, 'variable'):
-                    happy = joy.variable
-                    if happy.is_leaf:
-                        label += " \U0001F343"
-                        colour_graph = "green"
-                        vv = []
-                        for (name, obj) in watch:
-                            if obj is happy:
-                                label += " \U000023E9 " + \
-                                    "[b][u][color=#FF00FF]" + name + \
-                                    "[/color][/u][/b]"
-                                label_graph += name
-                                colour_graph = "blue"
-                                break
-                            vv = [str(obj.shape[x]) for x in range(len(obj.shape))]
-                        label += " [["
-                        label += ', '.join(vv)
-                        label += "]]"
-                        label += " " + str(happy.var())
-                        graph.node(str(joy), label_graph, fillcolor=colour_graph)
-                print(indent + label)
-                _draw_graph(joy, graph, watch, seen, indent + ".", joy)
-                if pobj is not None:
-                    graph.edge(str(pobj), str(joy))
-
 def main():
-    vis_backprop_graphs() #for visualising the backprop graph shape
+    #vis_backprop_graphs() #for visualising the backprop graph shape
     #shape testing
     #print(shape_test(model, [1,28,28], [1])) #output is not one hot encoded
 
@@ -315,16 +221,14 @@ def main():
     print("Loss function set")
 
     #start training loop for epochs - at some point add recording points here
-    epochs = 2 #50 for backbone, 100 for joint with exits
-
+    bb_epochs = 20 #50 for backbone
+    jt_epochs = 40 #100 for joint with exits
     path_str = 'outputs/'
-    if not os.path.exists(path_str):
-        os.makedirs(path_str)
 
     #train_backbone(model, train_dl, valid_dl, path_str, epochs=epochs, loss_f=loss_f)
 
-    train_joint(model, train_dl, valid_dl, path_str, backbone_epochs=epochs,
-            joint_epochs=epochs, loss_f=loss_f, pretrain_backbone=True)
+    train_joint(model, train_dl, valid_dl, path_str, backbone_epochs=bb_epochs,
+            joint_epochs=jt_epochs, loss_f=loss_f, pretrain_backbone=True)
 
 
     #once trained, run it on the test data
