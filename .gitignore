@@ -2,5 +2,6 @@
 **/__pycache__/
 **/dump/
 **/outputs/
+**/oldenv/
 net_graph.jpg
 net_graph.jpg.pdf
