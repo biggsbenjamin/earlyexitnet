@@ -161,6 +161,7 @@ def pull_mnist_data(batch_size=64):
 
 def save_model(model, path, file_prefix='', seed=None, epoch=None, opt=None, loss=None):
     #TODO add saving for inference only
+    #TODO add bool to save as onnx - remember about fixed bs
     #saves the model in pytorch format to the path specified
     timestamp = dt.now().strftime("%Y-%m-%d_%H%M%S")
     filenm = file_prefix + '-' + timestamp
@@ -221,8 +222,8 @@ def main():
     print("Loss function set")
 
     #start training loop for epochs - at some point add recording points here
-    bb_epochs = 20 #50 for backbone
-    jt_epochs = 40 #100 for joint with exits
+    bb_epochs = 50 #50 for backbone
+    jt_epochs = 100 #100 for joint with exits
     path_str = 'outputs/'
 
     #train_backbone(model, train_dl, valid_dl, path_str, epochs=epochs, loss_f=loss_f)
