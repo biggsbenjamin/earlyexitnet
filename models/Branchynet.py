@@ -22,7 +22,7 @@ class ConvPoolAc(nn.Module):
 #Main Network
 class Branchynet(nn.Module):
 
-    def __init__(self):
+    def __init__(self, exit_threshold=0.5):
         super(Branchynet, self).__init__()
 
         # call function to build layers
@@ -30,11 +30,11 @@ class Branchynet(nn.Module):
             #having distinct indices to compute the classfiers/branches on
         #function for building the branches
             #this includes the individual classifier layers, can keep separate
-            #last branch/classifer being terminal linear layer - included here not main net
+            #last branch/classif being terminal linear layer-included here not main net
 
         self.fast_inference_mode = False
-        #self.exit_criterion = entropy
-        self.exit_threshold = 0.5 #TODO make input, learnable, better default value
+        #self.exit_fn = entropy
+        self.exit_threshold = exit_threshold #TODO learnable, better default value
 
         self.backbone = nn.ModuleList()
         self.exits = nn.ModuleList()
@@ -63,7 +63,8 @@ class Branchynet(nn.Module):
         bb_layers = [post_exit] #include post exit 1 layers
         #bb_layers = []
         for cI, cO in zip(self.chansIn, self.chansOut): #TODO make input variable
-            bb_layer = ConvPoolAc(cI, cO, kernel=5, stride=1, padding=3, p_ceil_mode=True)
+            bb_layer = ConvPoolAc(cI, cO,
+                            kernel=5, stride=1, padding=3, p_ceil_mode=True)
             bb_layers.append(bb_layer)
 
         bb_layers.append(nn.Flatten())
@@ -92,34 +93,36 @@ class Branchynet(nn.Module):
         )
         self.exits.append(eeF)
 
-    def exit_criterion(self, x): #not for batches atm
+    def exit_criterion(self, x): #NOT for batch size > 1
         #evaluate the exit criterion on the result provided
         #return true if it can exit, false if it can't
-        softmax = nn.functional.softmax(x)
-        #apply scipy.stats.entropy for branchynet, when they do theirs, its on a batch
-        return entropy(softmax) < self.exit_threshold
+        with torch.no_grad():
+            softmax_res = nn.functional.softmax(x, dim=-1)
+            #apply scipy.stats.entropy for branchynet,
+            #when they do theirs, its on a batch
+            return entropy(softmax_res[-1]) < self.exit_threshold
 
     def forward(self, x):
         #std forward function - add var to distinguish be test and inf
 
-        res = []
-        if self.fast_inference_mode: #TODO fix for batches, dont think its trivial
+        res = [None] * len(self.backbone)
+        if self.fast_inference_mode: #works for bs of 1
             for i in range(len(self.backbone)):
                 x = self.backbone[i](x)
                 ec = self.exits[i](x)
-                res.append(ec)
+                res[i] = ec
                 if self.exit_criterion(ec):
-                    return res #return the results early if in inference mode
+                    break
 
-        else:
+        else: #used for training
             #calculate all exits
             for i in range(len(self.backbone)):
                 x = self.backbone[i](x)
-                res.append(self.exits[i](x))
+                res[i] = self.exits[i](x)
 
         return res
 
-    def set_fast_inf_mode(mode=True):
+    def set_fast_inf_mode(self, mode=True):
         if mode:
             self.eval()
         self.fast_inference_mode = mode
