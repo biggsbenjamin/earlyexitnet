@@ -105,7 +105,7 @@ class Branchynet(nn.Module):
     def forward(self, x):
         #std forward function - add var to distinguish be test and inf
 
-        res = [None] * len(self.backbone)
+        res = ['null'] * len(self.backbone)
         if self.fast_inference_mode: #works for bs of 1
             for i in range(len(self.backbone)):
                 x = self.backbone[i](x)

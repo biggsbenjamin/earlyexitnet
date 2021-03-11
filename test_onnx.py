@@ -50,22 +50,27 @@ def to_onnx(model, input_size, batch_size=1,
         opset_version=10,          # the ONNX version to export the model to
         do_constant_folding=True,  # t/f execute constant folding for optimization
         input_names = ['input'],   # the model's input names
-        output_names = ['ee1', 'eeF'], # the model's output names
+        output_names = ['ee1'],#, 'eeF'], # the model's output names
         dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
-                      'ee1' : {0 : 'exit_size'},
-                      'eeF' : {0 : 'exit_size'}
+                      'ee1' : {0 : 'exit_size'}#,
+                      #'eeF' : {0 : 'exit_size'}
                       })
     return sv_pnt
 
 def main():
     #set up model
-    model = Branchynet(exit_threshold=0.1)
+    model = Branchynet(exit_threshold=5.0)
+
+    #fast inf pytorch
+    model.set_fast_inf_mode()
     print("Model done")
-    bs = 1
+    bs = 2
     shape = [1,28,28]
 
+
+
     #save to onnx
-    save_path = to_onnx(model, shape, batch_size=bs)
+    save_path = to_onnx(model, shape, batch_size=bs, speedy=True)
 
     #load from onnx
     import onnx
@@ -75,15 +80,8 @@ def main():
     #feed same input to both
     test_x = torch.randn(bs, *shape)
 
-    #fast inf pytorch
-    model.set_fast_inf_mode()
-
     output = model(test_x)
-    print("RAW OUT:", output)
-
-    for i in output:
-        print("out:", i)
-
+    print("PT OUT:", output)
 
 
     #onnx runtime model
@@ -97,10 +95,15 @@ def main():
     ort_inputs = {ort_session.get_inputs()[0].name: to_numpy(test_x)}
     ort_outs = ort_session.run(None, ort_inputs)
 
-    print("ort_outs", ort_outs)
+    print("ONNX_OUT", ort_outs)
 
     # compare ONNX Runtime and PyTorch results
-    np.testing.assert_allclose([to_numpy(out) for out in output],
+    outlist=[]
+    for out in output:
+        if isinstance(out, torch.Tensor):
+            outlist.append(to_numpy(out))
+
+    np.testing.assert_allclose(outlist,
         ort_outs, rtol=1e-03, atol=1e-05)
 
 if __name__ == "__main__":
