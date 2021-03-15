@@ -22,7 +22,7 @@ class ConvPoolAc(nn.Module):
 #Main Network
 class Branchynet(nn.Module):
 
-    def __init__(self, exit_threshold=0.5):
+    def __init__(self, fast_inf_batch_size, exit_threshold=0.5):
         super(Branchynet, self).__init__()
 
         # call function to build layers
@@ -33,6 +33,7 @@ class Branchynet(nn.Module):
             #last branch/classif being terminal linear layer-included here not main net
 
         self.fast_inference_mode = False
+        self.fast_inf_batch_size = fast_inf_batch_size
         #self.exit_fn = entropy
         self.exit_threshold = exit_threshold #TODO learnable, better default value
 
@@ -97,28 +98,77 @@ class Branchynet(nn.Module):
         #evaluate the exit criterion on the result provided
         #return true if it can exit, false if it can't
         with torch.no_grad():
+            #print(x)
             softmax_res = nn.functional.softmax(x, dim=-1)
             #apply scipy.stats.entropy for branchynet,
             #when they do theirs, its on a batch
-            return entropy(softmax_res[-1]) < self.exit_threshold
+            #print(softmax_res)
+            entr = entropy(softmax_res[-1])
+            #print(entr)
+            return entr < self.exit_threshold
 
     def forward(self, x):
         #std forward function - add var to distinguish be test and inf
 
-        res = ['null'] * len(self.backbone)
-        if self.fast_inference_mode: #works for bs of 1
+        if self.fast_inference_mode:
+            #print("RES:", res)
+            #works for bs of 1
+            #'''
+            res=None
+            assert(self.fast_inf_batch_size == 1)
+            assert(x.shape[0] == 1)
             for i in range(len(self.backbone)):
                 x = self.backbone[i](x)
                 ec = self.exits[i](x)
-                res[i] = ec
+                res = ec
                 if self.exit_criterion(ec):
+                    print("skipping", i)
                     break
+                print("not skipping", i)
+            #'''
+            #works for predefined batchsize - pytorch only sadly
+            '''
+            res = [['null' for i in range(len(self.backbone))] \
+                    for j in range(self.fast_inf_batch_size)]
+            mb_chunk = torch.chunk(x, self.fast_inf_batch_size, dim=0)
+            for i,xs in enumerate(mb_chunk):
+                print(xs[0][0][0][0])
+                for j in range(len(self.backbone)):
+                    print("i:", i, "j:", j)
+                    xs = self.backbone[j](xs)
+                    ec = self.exits[j](xs)
+                    print(ec)
+                    res[i][j] = ec
+                    #print(res)
+                    if self.exit_criterion(ec):
+                        #continue
+                        break
+                    #print("not skipping")
+            '''
+
+            #works for predefined batchsize - pytorch only for same reason of batching
+            '''
+            mb_chunk = torch.chunk(x, self.fast_inf_batch_size, dim=0)
+            res_temp=[]
+            for xs in mb_chunk:
+                for j in range(len(self.backbone)):
+                    xs = self.backbone[j](xs)
+                    ec = self.exits[j](xs)
+                    if self.exit_criterion(ec):
+                        break
+                res_temp.append(ec)
+            print("RESTEMP", res_temp)
+            res = torch.cat(tuple(res_temp), 0)
+            '''
 
         else: #used for training
             #calculate all exits
+            #res = ['null'] * len(self.backbone)
+            res = []
             for i in range(len(self.backbone)):
                 x = self.backbone[i](x)
-                res[i] = self.exits[i](x)
+                #res[i] = self.exits[i](x)
+                res.append(self.exits[i](x))
 
         return res
 

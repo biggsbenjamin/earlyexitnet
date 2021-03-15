@@ -27,7 +27,7 @@ import io
 import torch.onnx
 
 def to_onnx(model, input_size, batch_size=1,
-        path='outputs/onnx', name='brn.onnx', speedy=False):
+        path='outputs/onnx', name='brn.onnx', speedy=False, test_in=None):
     #convert the model to onnx format - trial with onnx lib
     if speedy:
         fname = 'speedy-'+name
@@ -40,7 +40,10 @@ def to_onnx(model, input_size, batch_size=1,
     if not os.path.exists(path):
         os.makedirs(path)
 
-    x = torch.randn(batch_size, *input_size)
+    if test_in is None:
+        x = torch.randn(batch_size, *input_size)
+    else:
+        x=test_in
 
     torch.onnx.export(
         model,          # model being run
@@ -58,31 +61,57 @@ def to_onnx(model, input_size, batch_size=1,
     return sv_pnt
 
 def main():
+    bs = 1
+    shape = [1,28,28]
     #set up model
-    model = Branchynet(exit_threshold=5.0)
+    model = Branchynet(fast_inf_batch_size=bs, exit_threshold=0.0000001)
+
+    md_pth = '/home/benubu/phd/pytorch_play/earlyexitnet/outputs/pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth'
+    checkpoint = torch.load(md_pth)
+    model.load_state_dict(checkpoint['model_state_dict'])
+
 
     #fast inf pytorch
     model.set_fast_inf_mode()
     print("Model done")
-    bs = 2
-    shape = [1,28,28]
+
+    #feed same input to both
+    test_x = torch.randn(1, *shape)
+
+    import torchvision
+    tfs = transforms.Compose([
+        transforms.ToTensor()
+        ])
+    mnist_dl = DataLoader( torchvision.datasets.MNIST('../data/mnist',
+                                    download=True, train=False, transform=tfs),
+                batch_size=1, drop_last=True, shuffle=False)
+
+    mnistiter = iter(mnist_dl)
+    xb, yb = mnistiter.next()
+
+    combi = torch.cat((test_x, test_x, xb), 0)
+    #print(combi)
 
 
+    print("STARTING RUN")
+    output = model(xb)
+    print("PT OUT:", output)
+    print("SPACING")
+    for i in output:
+        print(i)
 
+
+    #'''
     #save to onnx
-    save_path = to_onnx(model, shape, batch_size=bs, speedy=True)
+    print("SAVING")
+    save_path = to_onnx(model, shape, batch_size=bs, speedy=True)#, test_in=combi)
+    print("SAVED")
 
     #load from onnx
     import onnx
     onnx_model = onnx.load(save_path)
     onnx.checker.check_model(onnx_model)
-
-    #feed same input to both
-    test_x = torch.randn(bs, *shape)
-
-    output = model(test_x)
-    print("PT OUT:", output)
-
+    print("IMPORTED")
 
     #onnx runtime model
     import onnxruntime
@@ -91,20 +120,30 @@ def main():
         return tensor.detach().cpu().numpy() if tensor.requires_grad else \
             tensor.cpu().numpy()
 
+    print("RUNNING ONNX")
     # compute ONNX Runtime output prediction
-    ort_inputs = {ort_session.get_inputs()[0].name: to_numpy(test_x)}
+    ort_inputs = {ort_session.get_inputs()[0].name: to_numpy(xb)}
     ort_outs = ort_session.run(None, ort_inputs)
 
     print("ONNX_OUT", ort_outs)
+    print("SPACING")
+    for i in ort_outs:
+        print(i)
+
 
     # compare ONNX Runtime and PyTorch results
     outlist=[]
     for out in output:
-        if isinstance(out, torch.Tensor):
-            outlist.append(to_numpy(out))
+        olist=[]
+        for o in out:
+            if isinstance(o, torch.Tensor):
+                olist.append(to_numpy(o))
+        outlist.append(olist)
+
+    print("OUTLIST:", outlist)
 
     np.testing.assert_allclose(outlist,
         ort_outs, rtol=1e-03, atol=1e-05)
-
+    #'''
 if __name__ == "__main__":
     main()
