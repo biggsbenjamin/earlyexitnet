@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 #import numpy as np
-from scipy.stats import entropy
+#from scipy.stats import entropy
 
 
 class ConvPoolAc(nn.Module):
@@ -18,6 +18,30 @@ class ConvPoolAc(nn.Module):
 
     def forward(self, x):
         return self.layer(x)
+'''
+def _exit_criterion(x, exit_threshold): #NOT for batch size > 1
+    #evaluate the exit criterion on the result provided
+    #return true if it can exit, false if it can't
+    with torch.no_grad():
+        #print(x)
+        softmax_res = nn.functional.softmax(x, dim=-1)
+        #apply scipy.stats.entropy for branchynet,
+        #when they do theirs, its on a batch
+        #print(softmax_res)
+        entr = entropy(softmax_res[-1])
+        #print(entr)
+        return entr < exit_threshold
+
+@torch.jit.script
+def _fast_inf_forward(x, backbone, exits, exit_threshold):
+    for i in range(len(backbone)):
+        x = backbone[i](x)
+        ec = exits[i](x)
+        res = ec
+        if _exit_criterion(ec):
+            break
+    return res
+'''
 
 #Main Network
 class Branchynet(nn.Module):
@@ -35,7 +59,7 @@ class Branchynet(nn.Module):
         self.fast_inference_mode = False
         self.fast_inf_batch_size = fast_inf_batch_size
         #self.exit_fn = entropy
-        self.exit_threshold = exit_threshold #TODO learnable, better default value
+        self.exit_threshold = torch.tensor([exit_threshold], dtype=torch.float32) #TODO learnable, better default value
 
         self.backbone = nn.ModuleList()
         self.exits = nn.ModuleList()
@@ -98,79 +122,56 @@ class Branchynet(nn.Module):
         #evaluate the exit criterion on the result provided
         #return true if it can exit, false if it can't
         with torch.no_grad():
-            #print(x)
-            softmax_res = nn.functional.softmax(x, dim=-1)
+            pk = nn.functional.softmax(x, dim=-1)[-1]
             #apply scipy.stats.entropy for branchynet,
-            #when they do theirs, its on a batch
-            #print(softmax_res)
-            entr = entropy(softmax_res[-1])
-            #print(entr)
+            #when they do theirs, its on a batch - same calc bu pt
+            entr = -torch.sum(pk * torch.log(pk))
+            #print("entropy:",entr)
             return entr < self.exit_threshold
+
+    '''@torch.jit.unused #decorator to skip jit comp
+    def _forward_training(self, x):
+        #TODO make jit compatible - not urgent
+        #broken because returning list()
+        res = []
+        for bb, ee in zip(self.backbone, self.exits):
+            x = bb(x)
+            res.append(ee(x))
+        return res'''
 
     def forward(self, x):
         #std forward function - add var to distinguish be test and inf
 
-        if self.fast_inference_mode:
-            #print("RES:", res)
+        #if self.fast_inference_mode:
             #works for bs of 1
-            #'''
-            res=None
-            assert(self.fast_inf_batch_size == 1)
-            assert(x.shape[0] == 1)
-            for i in range(len(self.backbone)):
-                x = self.backbone[i](x)
-                ec = self.exits[i](x)
-                res = ec
-                if self.exit_criterion(ec):
-                    print("skipping", i)
-                    break
-                print("not skipping", i)
-            #'''
-            #works for predefined batchsize - pytorch only sadly
-            '''
-            res = [['null' for i in range(len(self.backbone))] \
-                    for j in range(self.fast_inf_batch_size)]
-            mb_chunk = torch.chunk(x, self.fast_inf_batch_size, dim=0)
-            for i,xs in enumerate(mb_chunk):
-                print(xs[0][0][0][0])
-                for j in range(len(self.backbone)):
-                    print("i:", i, "j:", j)
-                    xs = self.backbone[j](xs)
-                    ec = self.exits[j](xs)
-                    print(ec)
-                    res[i][j] = ec
-                    #print(res)
-                    if self.exit_criterion(ec):
-                        #continue
-                        break
-                    #print("not skipping")
-            '''
-
-            #works for predefined batchsize - pytorch only for same reason of batching
-            '''
-            mb_chunk = torch.chunk(x, self.fast_inf_batch_size, dim=0)
-            res_temp=[]
-            for xs in mb_chunk:
-                for j in range(len(self.backbone)):
-                    xs = self.backbone[j](xs)
-                    ec = self.exits[j](xs)
-                    if self.exit_criterion(ec):
-                        break
-                res_temp.append(ec)
-            print("RESTEMP", res_temp)
-            res = torch.cat(tuple(res_temp), 0)
-            '''
-
-        else: #used for training
-            #calculate all exits
-            #res = ['null'] * len(self.backbone)
-            res = []
-            for i in range(len(self.backbone)):
-                x = self.backbone[i](x)
-                #res[i] = self.exits[i](x)
-                res.append(self.exits[i](x))
-
+            #assert(self.fast_inf_batch_size == 1)
+        #assert(x.shape[0] == 1)
+        for bb, ee in zip(self.backbone, self.exits):
+            x = bb(x)
+            to_ec = ee(x)
+            res = to_ec
+            if self.exit_criterion(to_ec):
+                return res
         return res
+
+        #works for predefined batchsize - pytorch only for same reason of batching
+        '''
+        mb_chunk = torch.chunk(x, self.fast_inf_batch_size, dim=0)
+        res_temp=[]
+        for xs in mb_chunk:
+            for j in range(len(self.backbone)):
+                xs = self.backbone[j](xs)
+                ec = self.exits[j](xs)
+                if self.exit_criterion(ec):
+                    break
+            res_temp.append(ec)
+        print("RESTEMP", res_temp)
+        res = torch.cat(tuple(res_temp), 0)
+        '''
+
+        #else: #used for training
+            #calculate all exits
+        #    return self._forward_training(x)
 
     def set_fast_inf_mode(self, mode=True):
         if mode:

@@ -45,17 +45,23 @@ def to_onnx(model, input_size, batch_size=1,
     else:
         x=test_in
 
+    #trying the scripty thing
+    scr_model = torch.jit.script(model)
+    print(scr_model.graph)
+    ex_out = scr_model(x)
+
     torch.onnx.export(
-        model,          # model being run
+        scr_model,      # model being run
         x,              # model input (or a tuple for multiple inputs)
         sv_pnt,         # where to save the model (can be a file or file-like object)
         export_params=True, # store the trained parameter weights inside the model file
-        opset_version=10,          # the ONNX version to export the model to
+        opset_version=12,          # the ONNX version to export the model to
         do_constant_folding=True,  # t/f execute constant folding for optimization
+        example_outputs=ex_out,
         input_names = ['input'],   # the model's input names
-        output_names = ['ee1'],#, 'eeF'], # the model's output names
+        output_names = ['exit'],#, 'eeF'], # the model's output names
         dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
-                      'ee1' : {0 : 'exit_size'}#,
+                      'exit' : {0 : 'exit_size'}#,
                       #'eeF' : {0 : 'exit_size'}
                       })
     return sv_pnt
@@ -64,9 +70,10 @@ def main():
     bs = 1
     shape = [1,28,28]
     #set up model
-    model = Branchynet(fast_inf_batch_size=bs, exit_threshold=0.0000001)
+    model = Branchynet(fast_inf_batch_size=bs, exit_threshold=0.0001)
 
-    md_pth = '/home/benubu/phd/pytorch_play/earlyexitnet/outputs/pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth'
+    md_pth = '/home/benubu/phd/pytorch_play/earlyexitnet/outputs/\
+pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth'
     checkpoint = torch.load(md_pth)
     model.load_state_dict(checkpoint['model_state_dict'])
 
@@ -76,7 +83,7 @@ def main():
     print("Model done")
 
     #feed same input to both
-    test_x = torch.randn(1, *shape)
+    test_x = torch.ones(1, *shape)#torch.randn(1, *shape)
 
     import torchvision
     tfs = transforms.Compose([
@@ -95,16 +102,19 @@ def main():
 
     print("STARTING RUN")
     output = model(xb)
+    output2 = model(test_x)
     print("PT OUT:", output)
-    print("SPACING")
-    for i in output:
-        print(i)
+    #print("SPACING")
+    #for i in output:
+    #    print(i)
+
+    print("PT OUT2:", output2)
 
 
     #'''
     #save to onnx
     print("SAVING")
-    save_path = to_onnx(model, shape, batch_size=bs, speedy=True)#, test_in=combi)
+    save_path = to_onnx(model, shape, batch_size=bs, speedy=True, name='brn-bothexits-script.onnx', test_in=xb)
     print("SAVED")
 
     #load from onnx
@@ -126,24 +136,28 @@ def main():
     ort_outs = ort_session.run(None, ort_inputs)
 
     print("ONNX_OUT", ort_outs)
-    print("SPACING")
-    for i in ort_outs:
-        print(i)
+    #print("SPACING")
+    #for i in ort_outs:
+    #    print(i)
+    ort_inputs2 = {ort_session.get_inputs()[0].name: to_numpy(test_x)}
+    ort_outs2 = ort_session.run(None, ort_inputs2)
+
+    print("ONNX_OUT2", ort_outs2)
 
 
     # compare ONNX Runtime and PyTorch results
-    outlist=[]
-    for out in output:
-        olist=[]
-        for o in out:
-            if isinstance(o, torch.Tensor):
-                olist.append(to_numpy(o))
-        outlist.append(olist)
+    #outlist=[]
+    #for out in output:
+        #olist=[]
+        #for o in out:
+        #    if isinstance(o, torch.Tensor):
+        #        olist.append(to_numpy(o))
+        #outlist.append(olist)
 
-    print("OUTLIST:", outlist)
-
-    np.testing.assert_allclose(outlist,
-        ort_outs, rtol=1e-03, atol=1e-05)
+    np.testing.assert_allclose(to_numpy(output),
+        ort_outs[0], rtol=1e-03, atol=1e-05)
+    np.testing.assert_allclose(to_numpy(output2),
+        ort_outs2[0], rtol=1e-03, atol=1e-05)
     #'''
 if __name__ == "__main__":
     main()
