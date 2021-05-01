@@ -113,7 +113,7 @@ class Branchynet(nn.Module):
 
         #final exit
         eeF = nn.Sequential(
-            nn.Flatten(),
+            nn.Flatten(), #not necessary but keeping to use trained models
             nn.Linear(84,10)
         )
         self.exits.append(eeF)
@@ -129,7 +129,15 @@ class Branchynet(nn.Module):
             #print("entropy:",entr)
             return entr < self.exit_threshold
 
-    '''@torch.jit.unused #decorator to skip jit comp
+    def exit_criterion_top1(self, x): #NOT for batch size > 1
+        #evaluate the exit criterion on the result provided
+        #return true if it can exit, false if it can't
+        with torch.no_grad():
+            pk = nn.functional.softmax(x, dim=-1)
+            top1 = torch.max(pk)
+            return top1 > self.exit_threshold
+
+    @torch.jit.unused #decorator to skip jit comp
     def _forward_training(self, x):
         #TODO make jit compatible - not urgent
         #broken because returning list()
@@ -137,41 +145,42 @@ class Branchynet(nn.Module):
         for bb, ee in zip(self.backbone, self.exits):
             x = bb(x)
             res.append(ee(x))
-        return res'''
+        return res
 
     def forward(self, x):
         #std forward function - add var to distinguish be test and inf
 
-        #if self.fast_inference_mode:
-            #works for bs of 1
-            #assert(self.fast_inf_batch_size == 1)
-        #assert(x.shape[0] == 1)
-        for bb, ee in zip(self.backbone, self.exits):
-            x = bb(x)
-            to_ec = ee(x)
-            res = to_ec
-            if self.exit_criterion(to_ec):
-                return res
-        return res
+        if self.fast_inference_mode:
+                #works for bs of 1
+                #assert(self.fast_inf_batch_size == 1)
+            #assert(x.shape[0] == 1)
+            for bb, ee in zip(self.backbone, self.exits):
+                x = bb(x)
+                res = ee(x)
+                #res = to_ec
+                #if self.exit_criterion(to_ec):
+                if self.exit_criterion_top1(res):
+                    return res
+            return res
 
-        #works for predefined batchsize - pytorch only for same reason of batching
-        '''
-        mb_chunk = torch.chunk(x, self.fast_inf_batch_size, dim=0)
-        res_temp=[]
-        for xs in mb_chunk:
-            for j in range(len(self.backbone)):
-                xs = self.backbone[j](xs)
-                ec = self.exits[j](xs)
-                if self.exit_criterion(ec):
-                    break
-            res_temp.append(ec)
-        print("RESTEMP", res_temp)
-        res = torch.cat(tuple(res_temp), 0)
-        '''
+            #works for predefined batchsize - pytorch only for same reason of batching
+            '''
+            mb_chunk = torch.chunk(x, self.fast_inf_batch_size, dim=0)
+            res_temp=[]
+            for xs in mb_chunk:
+                for j in range(len(self.backbone)):
+                    xs = self.backbone[j](xs)
+                    ec = self.exits[j](xs)
+                    if self.exit_criterion(ec):
+                        break
+                res_temp.append(ec)
+            print("RESTEMP", res_temp)
+            res = torch.cat(tuple(res_temp), 0)
+            '''
 
-        #else: #used for training
+        else: #used for training
             #calculate all exits
-        #    return self._forward_training(x)
+            return self._forward_training(x)
 
     def set_fast_inf_mode(self, mode=True):
         if mode:

@@ -65,22 +65,23 @@ def to_onnx(model, input_size, batch_size=1,
         example_outputs=ex_out,
         input_names = ['input'],   # the model's input names
         output_names = ['exit'],#, 'eeF'], # the model's output names
-        dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
-                      'exit' : {0 : 'exit_size'}#,
+        #dynamic_axes={#'input' : {0 : 'batch_size'},    # variable length axes
+                      #'exit' : {0 : 'exit_size'}#,
                       #'eeF' : {0 : 'exit_size'}
-                      })
+                      #}
+    )
     return sv_pnt
 
 def brn_main():
     bs = 1
     shape = [1,28,28]
     #set up model
-    model = Branchynet(fast_inf_batch_size=bs, exit_threshold=0.0001)
+    model = Branchynet(fast_inf_batch_size=bs, exit_threshold=0.1)
 
     md_pth = '/home/benubu/phd/pytorch_play/earlyexitnet/outputs/\
 pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth'
     checkpoint = torch.load(md_pth)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    #model.load_state_dict(checkpoint['model_state_dict'])
 
 
     #fast inf pytorch
@@ -119,7 +120,7 @@ pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth'
     #'''
     #save to onnx
     print("SAVING")
-    save_path = to_onnx(model, shape, batch_size=bs, speedy=True, name='brn-bothexits-script.onnx', test_in=xb)
+    save_path = to_onnx(model, shape, batch_size=bs, speedy=True, name='brn-top1ee-bsf-traininginc.onnx', test_in=xb)
     print("SAVED")
 
     #load from onnx
@@ -238,7 +239,7 @@ def lenet_main():
 
     #load from onnx
     import onnx
-    onnx_model_ni = onnx.load(sv_pnt)
+    #onnx_model_ni = onnx.load(sv_pnt)
     onnx.checker.check_model(onnx_model_ni)
     print("IMPORTED")
 
@@ -295,8 +296,8 @@ def lenet_main():
 
 
 def main():
-    #brn_main()
-    lenet_main()
+    brn_main()
+    #lenet_main()
 
 if __name__ == "__main__":
     main()
