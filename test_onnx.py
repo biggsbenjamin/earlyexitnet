@@ -120,7 +120,7 @@ pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth'
     #'''
     #save to onnx
     print("SAVING")
-    save_path = to_onnx(model, shape, batch_size=bs, speedy=True, name='brn-top1ee-bsf-traininginc.onnx', test_in=xb)
+    save_path = to_onnx(model, shape, batch_size=bs, speedy=True, name='brn-top1ee-bsf-trnInc-sftmx.onnx', test_in=xb)
     print("SAVED")
 
     #load from onnx

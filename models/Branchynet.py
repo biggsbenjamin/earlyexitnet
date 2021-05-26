@@ -107,14 +107,16 @@ class Branchynet(nn.Module):
             nn.ReLU(True),
             ConvPoolAc(5, 10, kernel=3, stride=1, padding=1, p_ceil_mode=True),
             nn.Flatten(),
-            nn.Linear(640,10) #insize,outsize - make variable on num of classes
+            nn.Linear(640,10), #insize,outsize - make variable on num of classes
+            nn.Softmax(dim=-1)
         )
         self.exits.append(ee1)
 
         #final exit
         eeF = nn.Sequential(
             nn.Flatten(), #not necessary but keeping to use trained models
-            nn.Linear(84,10)
+            nn.Linear(84,10),
+            nn.Softmax(dim=-1)
         )
         self.exits.append(eeF)
 
@@ -122,10 +124,10 @@ class Branchynet(nn.Module):
         #evaluate the exit criterion on the result provided
         #return true if it can exit, false if it can't
         with torch.no_grad():
-            pk = nn.functional.softmax(x, dim=-1)[-1]
+            #pk = nn.functional.softmax(x, dim=-1)[-1]
             #apply scipy.stats.entropy for branchynet,
             #when they do theirs, its on a batch - same calc bu pt
-            entr = -torch.sum(pk * torch.log(pk))
+            entr = -torch.sum(pk * torch.log(x))
             #print("entropy:",entr)
             return entr < self.exit_threshold
 
@@ -133,8 +135,8 @@ class Branchynet(nn.Module):
         #evaluate the exit criterion on the result provided
         #return true if it can exit, false if it can't
         with torch.no_grad():
-            pk = nn.functional.softmax(x, dim=-1)
-            top1 = torch.max(pk)
+            #pk = nn.functional.softmax(x, dim=-1)
+            top1 = torch.max(x)
             return top1 > self.exit_threshold
 
     @torch.jit.unused #decorator to skip jit comp
