@@ -73,16 +73,20 @@ def to_onnx(model, input_size, batch_size=1,
     return sv_pnt
 
 def brn_main():
+    print("Running BranchyNet Test")
     bs = 1
     shape = [1,28,28]
     #set up model
-    model = Branchynet(fast_inf_batch_size=bs, exit_threshold=0.1)
+    #model = Branchynet(fast_inf_batch_size=bs, exit_threshold=0.1)
+    model = Branchynet(exit_threshold=0.8)
 
-    md_pth = '/home/benubu/phd/pytorch_play/earlyexitnet/outputs/\
-pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth'
+    md_pth = '/home/localadmin/phd/earlyexitnet/outputs/\
+pre_Trn_bb_2021-07-09_141616/pretrn-joint-8-2021-07-09_142311.pth'
+#pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth
+
     checkpoint = torch.load(md_pth)
-    #model.load_state_dict(checkpoint['model_state_dict'])
-
+    model.load_state_dict(checkpoint['model_state_dict'])
+    save_name = 'brn-top1ee-bsf-lessOps-trained.onnx'
 
     #fast inf pytorch
     model.set_fast_inf_mode()
@@ -120,8 +124,8 @@ pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth'
     #'''
     #save to onnx
     print("SAVING")
-    save_path = to_onnx(model, shape, batch_size=bs, speedy=True, name='brn-top1ee-bsf-trnInc-sftmx.onnx', test_in=xb)
-    print("SAVED")
+    save_path = to_onnx(model, shape, batch_size=bs, speedy=True, name=save_name, test_in=xb)
+    print("SAVED: ",save_name)
 
     #load from onnx
     onnx_model = onnx.load(save_path)
@@ -166,6 +170,7 @@ pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth'
     #'''
 
 def lenet_main():
+    print("Running LeNet/TestNet Test")
     bs = 64
     shape = [1,28,28]
     #set up model

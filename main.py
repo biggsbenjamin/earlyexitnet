@@ -39,6 +39,7 @@ def train_backbone(model, train_dl, valid_dl, save_path, epochs=50,
     #timestamp = dt.now().strftime("%Y-%m-%d_%H%M%S")
     #bb_folder_path = 'backbone-' + timestamp
 
+    best_val_loss = [1.0, '']
     for epoch in range(epochs):
         model.train()
         print("Starting epoch:", epoch+1, end="... ", flush=True)
@@ -64,11 +65,16 @@ def train_backbone(model, train_dl, valid_dl, save_path, epochs=50,
                     [[loss_f(exit, yb) for exit in model(xb)]
                         for xb, yb in valid_dl]), axis=0)
 
-        print("V Loss:", valid_losses[-1] / len(valid_dl))
+        val_loss_avg = valid_losses[-1] / len(valid_dl)
+        print("V Loss:", val_loss_avg)
         #probe_params(model)
-        save_model(model, save_path, file_prefix='backbone', opt=opt)
+        savepoint = save_model(model, save_path, file_prefix='backbone-'+str(epoch+1), opt=opt)
 
-    return #something trained
+        if val_loss_avg < best_val_loss[0]:
+            best_val_loss[0] = val_loss_avg
+            best_val_loss[1] = savepoint
+    print("BEST VAL LOSS: ", best_val_loss[0], " for epoch: ", best_val_loss[1])
+    return savepoint #link to best val loss model
 
 def train_exits(model, epochs=100):
     #train the exits
@@ -86,9 +92,12 @@ def train_joint(model, train_dl, valid_dl, save_path, opt=None,
     if pretrain_backbone:
         print("PRETRAINING BACKBONE FROM SCRATCH")
         folder_path = 'pre_Trn_bb_' + timestamp
-        train_backbone(model, train_dl, valid_dl, os.path.join(save_path, folder_path),
+        best_bb_path = train_backbone(model, train_dl,
+                valid_dl, os.path.join(save_path, folder_path),
                 epochs=backbone_epochs, loss_f=loss_f)
         #train the rest...
+        print("LOADING BEST BACKBONE")
+        load_model(model, best_bb_path)
         print("JOINT TRAINING WITH PRETRAINED BACKBONE")
 
         prefix = 'pretrn-joint'
@@ -109,6 +118,7 @@ def train_joint(model, train_dl, valid_dl, save_path, opt=None,
 
         opt = optim.Adam(model.parameters(), betas=exp_decay_rates, lr=lr)
 
+    best_val_loss = [[1.0,1.0], ''] #TODO make sure list size matches num of exits
     for epoch in range(joint_epochs):
         model.train()
         print("starting epoch:", epoch+1, end="... ", flush=True)
@@ -135,9 +145,21 @@ def train_joint(model, train_dl, valid_dl, save_path, opt=None,
                     [[loss_f(exit, yb) for exit in model(xb)]
                         for xb, yb in valid_dl]), axis=0)
 
-        print("v loss:", valid_losses / len(valid_dl))
-        save_model(model, spth, file_prefix=prefix, opt=opt)
 
+        val_loss_avg = valid_losses / len(valid_dl)
+        print("v loss:", val_loss_avg)
+        savepoint = save_model(model, spth, file_prefix=prefix+'-'+str(epoch+1), opt=opt)
+
+        el_total=0.0
+        bl_total=0.0
+        for exit_loss, best_loss in zip(val_loss_avg,best_val_loss[0]):
+            el_total+=exit_loss
+            bl_total+=best_loss
+        if el_total < bl_total:
+            best_val_loss[0] = val_loss_avg
+            best_val_loss[1] = savepoint
+
+    print("BEST* VAL LOSS: ", best_val_loss[0], " for epoch: ", best_val_loss[1])
     return #something trained
 
 def test():
@@ -223,7 +245,7 @@ def main():
 
     #start training loop for epochs - at some point add recording points here
     bb_epochs = 50 #50 for backbone
-    jt_epochs = 100 #100 for joint with exits
+    jt_epochs = 60 #100 for joint with exits
     path_str = 'outputs/'
 
     #train_backbone(model, train_dl, valid_dl, path_str, epochs=epochs, loss_f=loss_f)
