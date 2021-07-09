@@ -46,7 +46,7 @@ def _fast_inf_forward(x, backbone, exits, exit_threshold):
 #Main Network
 class Branchynet(nn.Module):
 
-    def __init__(self, fast_inf_batch_size, exit_threshold=0.5):
+    def __init__(self, exit_threshold=0.5):
         super(Branchynet, self).__init__()
 
         # call function to build layers
@@ -57,7 +57,7 @@ class Branchynet(nn.Module):
             #last branch/classif being terminal linear layer-included here not main net
 
         self.fast_inference_mode = False
-        self.fast_inf_batch_size = fast_inf_batch_size
+        #self.fast_inf_batch_size = fast_inf_batch_size #add to input args if used
         #self.exit_fn = entropy
         self.exit_threshold = torch.tensor([exit_threshold], dtype=torch.float32) #TODO learnable, better default value
 
@@ -74,19 +74,19 @@ class Branchynet(nn.Module):
 
     def _build_backbone(self):
         #Starting conv2d layer
-        self.backbone.append(nn.Conv2d(1, 5, kernel_size=5, stride=1, padding=3))
+        #self.backbone.append(nn.Conv2d(1, 5, kernel_size=5, stride=1, padding=3)
 
         #after first exit
-        post_exit= nn.Sequential(
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(True)
-        )
-        #strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=3)
-        #self.backbone.append(strt_bl)
+        #post_exit= nn.Sequential(
+        #    nn.MaxPool2d(2, stride=2),
+        #    nn.ReLU(True)
+        #)
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=3)
+        self.backbone.append(strt_bl)
 
         #adding ConvPoolAc blocks - remaining backbone
-        bb_layers = [post_exit] #include post exit 1 layers
-        #bb_layers = []
+        #bb_layers = [post_exit] #include post exit 1 layers
+        bb_layers = []
         for cI, cO in zip(self.chansIn, self.chansOut): #TODO make input variable
             bb_layer = ConvPoolAc(cI, cO,
                             kernel=5, stride=1, padding=3, p_ceil_mode=True)
@@ -103,12 +103,12 @@ class Branchynet(nn.Module):
 
         #early exit 1
         ee1 = nn.Sequential(
-            nn.MaxPool2d(2, stride=2), #ksize, stride
-            nn.ReLU(True),
+            #nn.MaxPool2d(2, stride=2), #ksize, stride
+            #nn.ReLU(True),
             ConvPoolAc(5, 10, kernel=3, stride=1, padding=1, p_ceil_mode=True),
             nn.Flatten(),
             nn.Linear(640,10), #insize,outsize - make variable on num of classes
-            nn.Softmax(dim=-1)
+            #nn.Softmax(dim=-1)
         )
         self.exits.append(ee1)
 
@@ -116,7 +116,7 @@ class Branchynet(nn.Module):
         eeF = nn.Sequential(
             nn.Flatten(), #not necessary but keeping to use trained models
             nn.Linear(84,10),
-            nn.Softmax(dim=-1)
+            #nn.Softmax(dim=-1)
         )
         self.exits.append(eeF)
 
@@ -135,8 +135,8 @@ class Branchynet(nn.Module):
         #evaluate the exit criterion on the result provided
         #return true if it can exit, false if it can't
         with torch.no_grad():
-            #pk = nn.functional.softmax(x, dim=-1)
-            top1 = torch.max(x)
+            pk = nn.functional.softmax(x, dim=-1)
+            top1 = torch.max(pk) #x)
             return top1 > self.exit_threshold
 
     @torch.jit.unused #decorator to skip jit comp
