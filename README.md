@@ -4,7 +4,7 @@
 Requires conda/miniconda for package management.
 To set up the environment: 
 
-`conda env create --file env.yaml`
+`conda env create --file pt1_8_env.yaml`
 
 ## Other python requirements
 installed onnx-1.8.1 
@@ -18,12 +18,15 @@ Can be installed from conda env with:
 `pip install onnx onnxruntime`
 
 ## Getting visual representation of the onnx graph
-Make sure to activate the main env - with graphviz and pydot support.
+Use netron viewer
 
-Run the following to generate the dot file of the onnx graph:
+## Running onnx test script
+Should work from environment `pt1_8_env.yaml`
 
-`python <path to onnx>/tools/net_drawer.py --input <path to .onnx> --output <net name>.dot --embed_docstring`
+Requires path to trained network for branchynet, not required for testnet/lenet.
 
-Run the following to convert the dot file to svg:
+Command:
+`python test_onnx.py --model [brn, lenet] --trained_path path/to/trained/branchynet.pth --save_name onnx_save_name`
 
-`dot -Tsvg <net name>.dot -o <net name>.svg`
+Example:
+`python test_onnx.py --model brn --trained_path /home/localadmin/phd/earlyexitnet/outputs/pre_Trn_bb_2021-07-09_141616/pretrn-joint-8-2021-07-09_142311.pth --save_name test_out`
