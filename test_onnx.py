@@ -9,6 +9,7 @@ Testing the onnx lib with pytorch branchynet early exit model.
 - Loading a model from pytorch and changing to onnx
 '''
 
+#importing pytorch models to test
 from models.Branchynet import Branchynet, ConvPoolAc
 from models.Lenet import Lenet
 from models.Testnet import Testnet
@@ -18,6 +19,8 @@ from tools import *
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+#to get inputs for testing
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 import torchvision
 import torchvision.transforms as transforms
@@ -25,21 +28,24 @@ import torchvision.transforms as transforms
 import os
 import numpy as np
 from datetime import datetime as dt
+import argparse
 
+#to test onnx methods
 import io
 import torch.onnx
 
 import onnx
+import onnxruntime
 
 def to_onnx(model, input_size, batch_size=1,
-        path='outputs/onnx', name='brn.onnx', speedy=False, test_in=None):
+        path='outputs/onnx', fname='brn.onnx', test_in=None):
     #convert the model to onnx format - trial with onnx lib
-    if speedy:
-        fname = 'speedy-'+name
-        model.set_fast_inf_mode()
-    else:
-        fname = 'slow-'+name
-        model.eval()
+    #if speedy:
+    #    fname = 'speedy-'+name
+    #    model.set_fast_inf_mode()
+    #else:
+    #    fname = 'slow-'+name
+    #    model.eval()
 
     sv_pnt = os.path.join(path, fname)
     if not os.path.exists(path):
@@ -52,8 +58,9 @@ def to_onnx(model, input_size, batch_size=1,
 
     #trying the scripty thing
     scr_model = torch.jit.script(model)
-    print(scr_model.graph)
-    ex_out = scr_model(x)
+    print("PRINTING PYTORCH MODEL SCRIPT")
+    print(scr_model.graph, "\n")
+    ex_out = scr_model(x) # get output of script model
 
     torch.onnx.export(
         scr_model,      # model being run
@@ -65,14 +72,18 @@ def to_onnx(model, input_size, batch_size=1,
         example_outputs=ex_out,
         input_names = ['input'],   # the model's input names
         output_names = ['exit'],#, 'eeF'], # the model's output names
-        #dynamic_axes={#'input' : {0 : 'batch_size'},    # variable length axes
+        #dynamic_axes={#'input' : {0 : 'batch_size'}, # NOTE not used, variable length axes
                       #'exit' : {0 : 'exit_size'}#,
                       #'eeF' : {0 : 'exit_size'}
                       #}
     )
     return sv_pnt
 
-def brn_main():
+#'/home/localadmin/phd/earlyexitnet/outputs/pre_Trn_bb_2021-07-09_141616/pretrn-joint-8-2021-07-09_142311.pth'
+#'brn-top1ee-bsf-lessOps-trained.onnx'
+
+def brn_main(md_pth, save_name):
+
     print("Running BranchyNet Test")
     bs = 1
     shape = [1,28,28]
@@ -80,22 +91,20 @@ def brn_main():
     #model = Branchynet(fast_inf_batch_size=bs, exit_threshold=0.1)
     model = Branchynet(exit_threshold=0.8)
 
-    md_pth = '/home/localadmin/phd/earlyexitnet/outputs/\
-pre_Trn_bb_2021-07-09_141616/pretrn-joint-8-2021-07-09_142311.pth'
-#pre_Trn_bb_2021-03-03_133905/pretrn-joint-2021-03-03_140528.pth
-
     checkpoint = torch.load(md_pth)
     model.load_state_dict(checkpoint['model_state_dict'])
-    save_name = 'brn-top1ee-bsf-lessOps-trained.onnx'
+    if save_name[-5:] != '.onnx':
+        save_name += '.onnx'
 
     #fast inf pytorch
     model.set_fast_inf_mode()
-    print("Model done")
+    print("Finished loading model parameters")
 
-    #feed same input to both
-    test_x = torch.ones(1, *shape)#torch.randn(1, *shape)
+    #generate input
+    test_x = torch.ones(1, *shape)
+    #torch.randn(1, *shape)
 
-    import torchvision
+    #pull real input example from MNIST data set
     tfs = transforms.Compose([
         transforms.ToTensor()
         ])
@@ -104,50 +113,44 @@ pre_Trn_bb_2021-07-09_141616/pretrn-joint-8-2021-07-09_142311.pth'
                 batch_size=1, drop_last=True, shuffle=False)
 
     mnistiter = iter(mnist_dl)
-    xb, yb = mnistiter.next()
+    xb, yb = mnistiter.next() #MNIST example stored in xb
 
-    combi = torch.cat((test_x, test_x, xb), 0)
+    combi = torch.cat((test_x, test_x, xb), 0) #NOTE currently not used, combines into batch
     #print(combi)
 
 
-    print("STARTING RUN")
+    print("STARTING RUN OF PYTORCH MODEL WITH INPUTS")
     output = model(xb)
     output2 = model(test_x)
     print("PT OUT:", output)
-    #print("SPACING")
-    #for i in output:
-    #    print(i)
-
     print("PT OUT2:", output2)
 
 
-    #'''
     #save to onnx
-    print("SAVING")
-    save_path = to_onnx(model, shape, batch_size=bs, speedy=True, name=save_name, test_in=xb)
-    print("SAVED: ",save_name)
+    print("SAVING MODEL TO ONNX: ", save_name)
+    save_path = to_onnx(model, shape, batch_size=bs, fname=save_name, test_in=xb)
+    print("SAVED TO: ",save_path)
 
     #load from onnx
-    onnx_model = onnx.load(save_path)
-    onnx.checker.check_model(onnx_model)
-    print("IMPORTED")
+    print("IMPORTING MODEL FROM ONNX")
+    #onnx_model = onnx.load(save_path)
+    #onnx.checker.check_model(onnx_model) #running model checker
+    #TODO add more onnx checks
+    #print("IMPORTED")
 
     #onnx runtime model
-    import onnxruntime
-    ort_session = onnxruntime.InferenceSession(save_path)
-    def to_numpy(tensor):
+
+    ort_session = onnxruntime.InferenceSession(save_path) #start onnx runtime session
+    def to_numpy(tensor): #function to convert tensor to numpy format
         return tensor.detach().cpu().numpy() if tensor.requires_grad else \
             tensor.cpu().numpy()
 
     print("RUNNING ONNX")
-    # compute ONNX Runtime output prediction
+    # compute ONNX Runtime (ort) output prediction
     ort_inputs = {ort_session.get_inputs()[0].name: to_numpy(xb)}
     ort_outs = ort_session.run(None, ort_inputs)
 
     print("ONNX_OUT", ort_outs)
-    #print("SPACING")
-    #for i in ort_outs:
-    #    print(i)
     ort_inputs2 = {ort_session.get_inputs()[0].name: to_numpy(test_x)}
     ort_outs2 = ort_session.run(None, ort_inputs2)
 
@@ -163,11 +166,11 @@ pre_Trn_bb_2021-07-09_141616/pretrn-joint-8-2021-07-09_142311.pth'
         #        olist.append(to_numpy(o))
         #outlist.append(olist)
 
+    # compare ONNX Runtime and PyTorch results
     np.testing.assert_allclose(to_numpy(output),
         ort_outs[0], rtol=1e-03, atol=1e-05)
     np.testing.assert_allclose(to_numpy(output2),
         ort_outs2[0], rtol=1e-03, atol=1e-05)
-    #'''
 
 def lenet_main():
     print("Running LeNet/TestNet Test")
@@ -183,7 +186,6 @@ def lenet_main():
     #feed same input to both
     test_x = torch.ones(1, *shape)#torch.randn(1, *shape)
 
-    import torchvision
     tfs = transforms.Compose([
         transforms.ToTensor()
         ])
@@ -297,12 +299,29 @@ def lenet_main():
         ort_outs[0], rtol=1e-03, atol=1e-05)
     np.testing.assert_allclose(to_numpy(output2),
         ort_outs2[0], rtol=1e-03, atol=1e-05)
-    #'''
 
+
+def path_check(string): #checks for valid path
+    if os.path.exists(string):
+        return string
+    else:
+        raise FileNotFoundError(string)
 
 def main():
-    brn_main()
-    #lenet_main()
+    parser = argparse.ArgumentParser(description="script for running pytorch-onnx tests")
+    parser.add_argument('--model',choices=['brn','lenet'],
+                        help='choose the model')
+    parser.add_argument('--trained_path', type=path_check,
+                        help='path to trained model')
+    parser.add_argument('--save_name', type=str,
+                        help='path to trained model')
+    args = parser.parse_args()
+
+    if args.model == 'brn':
+        brn_main(md_pth=args.trained_path, save_name=args.save_name)
+    elif args.model == 'lenet':
+        print("ignorning model path provided")
+        lenet_main()
 
 if __name__ == "__main__":
     main()
