@@ -1,4 +1,6 @@
 # Early-exit Network(s)
+Hopefully going to be a repository of EE models that I can work with in pytorch.
+`BranchyNet.py` is based on the branchy-LeNet model from the [BranchyNet](https://github.com/kunglab/branchynet) repo.
 
 ## Conda Environment
 Requires conda/miniconda for package management.
