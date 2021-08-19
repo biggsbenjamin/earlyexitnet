@@ -18,30 +18,29 @@ class ConvPoolAc(nn.Module):
 
     def forward(self, x):
         return self.layer(x)
-'''
-def _exit_criterion(x, exit_threshold): #NOT for batch size > 1
-    #evaluate the exit criterion on the result provided
-    #return true if it can exit, false if it can't
-    with torch.no_grad():
-        #print(x)
-        softmax_res = nn.functional.softmax(x, dim=-1)
-        #apply scipy.stats.entropy for branchynet,
-        #when they do theirs, its on a batch
-        #print(softmax_res)
-        entr = entropy(softmax_res[-1])
-        #print(entr)
-        return entr < exit_threshold
 
-@torch.jit.script
-def _fast_inf_forward(x, backbone, exits, exit_threshold):
-    for i in range(len(backbone)):
-        x = backbone[i](x)
-        ec = exits[i](x)
-        res = ec
-        if _exit_criterion(ec):
-            break
-    return res
-'''
+#def _exit_criterion(x, exit_threshold): #NOT for batch size > 1
+#    #evaluate the exit criterion on the result provided
+#    #return true if it can exit, false if it can't
+#    with torch.no_grad():
+#        #print(x)
+#        softmax_res = nn.functional.softmax(x, dim=-1)
+#        #apply scipy.stats.entropy for branchynet,
+#        #when they do theirs, its on a batch
+#        #print(softmax_res)
+#        entr = entropy(softmax_res[-1])
+#        #print(entr)
+#        return entr < exit_threshold
+#
+#@torch.jit.script
+#def _fast_inf_forward(x, backbone, exits, exit_threshold):
+#    for i in range(len(backbone)):
+#        x = backbone[i](x)
+#        ec = exits[i](x)
+#        res = ec
+#        if _exit_criterion(ec):
+#            break
+#    return res
 
 #Main Network
 class Branchynet(nn.Module):
@@ -81,19 +80,22 @@ class Branchynet(nn.Module):
         #    nn.MaxPool2d(2, stride=2),
         #    nn.ReLU(True)
         #)
-        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=3)
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=4)#NOTE was padding 3
         self.backbone.append(strt_bl)
 
         #adding ConvPoolAc blocks - remaining backbone
         #bb_layers = [post_exit] #include post exit 1 layers
         bb_layers = []
-        for cI, cO in zip(self.chansIn, self.chansOut): #TODO make input variable
-            bb_layer = ConvPoolAc(cI, cO,
-                            kernel=5, stride=1, padding=3, p_ceil_mode=True)
-            bb_layers.append(bb_layer)
-
+        #for cI, cO in zip(self.chansIn, self.chansOut): #TODO make input variable
+        #    bb_layer = ConvPoolAc(cI, cO,
+        #                    kernel=5, stride=1, padding=3) #, p_ceil_mode=True)
+        #    bb_layers.append(bb_layer)
+        bb_layers.append(ConvPoolAc(5, 10,
+                            kernel=5, stride=1, padding=4) )#NOTE was padding 3
+        bb_layers.append(ConvPoolAc(10, 20,
+                            kernel=5, stride=1, padding=3) )
         bb_layers.append(nn.Flatten())
-        bb_layers.append(nn.Linear(720, 84))
+        bb_layers.append(nn.Linear(720, 84)) #NOTE original was 720
 
         remaining_backbone_layers = nn.Sequential(*bb_layers)
         self.backbone.append(remaining_backbone_layers)
@@ -105,16 +107,16 @@ class Branchynet(nn.Module):
         ee1 = nn.Sequential(
             #nn.MaxPool2d(2, stride=2), #ksize, stride
             #nn.ReLU(True),
-            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1, p_ceil_mode=True),
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1), #, p_ceil_mode=True),
             nn.Flatten(),
-            nn.Linear(640,10), #insize,outsize - make variable on num of classes
+            nn.Linear(640,10), # NOTE original was 640 #insize,outsize - make variable on num of classes
             #nn.Softmax(dim=-1)
         )
         self.exits.append(ee1)
 
         #final exit
         eeF = nn.Sequential(
-            nn.Flatten(), #not necessary but keeping to use trained models
+            #nn.Flatten(), #not necessary but keeping to use trained models
             nn.Linear(84,10),
             #nn.Softmax(dim=-1)
         )

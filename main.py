@@ -244,8 +244,8 @@ def main():
     print("Loss function set")
 
     #start training loop for epochs - at some point add recording points here
-    bb_epochs = 50 #50 for backbone
-    jt_epochs = 60 #100 for joint with exits
+    bb_epochs = 5 #50 for backbone
+    jt_epochs = 10 #100 for joint with exits
     path_str = 'outputs/'
 
     #train_backbone(model, train_dl, valid_dl, path_str, epochs=epochs, loss_f=loss_f)
