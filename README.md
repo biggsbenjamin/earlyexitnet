@@ -20,7 +20,7 @@ Can be installed from conda env with:
 `pip install onnx onnxruntime`
 
 ## Getting visual representation of the onnx graph
-Use netron viewer
+Use [netron](ihttps://netron.app/) viewer
 
 ## Running onnx test script
 Should work from environment `pt1_8_env.yaml`

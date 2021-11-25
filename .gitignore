@@ -3,6 +3,7 @@
 **/dump/
 **/outputs/
 **/oldenv/
+**/data_test/
 net_graph.jpg
 net_graph.jpg.pdf
 *.pyc
