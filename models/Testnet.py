@@ -1,37 +1,78 @@
 import torch
 import torch.nn as nn
 
-class Testnet(nn.Module):
+class BrnFirstExit(nn.Module):
+    # backbone up to first exit of branchy-lenet model, and first exit
     def __init__(self):
-        super(Testnet, self).__init__()
-        self.conv1 = nn.Conv2d(1, 6, 5)
-        self.relu1 = nn.ReLU()
-        self.pool1 = nn.MaxPool2d(2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.relu2 = nn.ReLU()
-        self.pool2 = nn.MaxPool2d(2)
-
-        self.fltn = nn.Flatten()
-
-        self.fc1 = nn.Linear(256, 120)
-        self.relu3 = nn.ReLU()
-        self.fc2 = nn.Linear(120, 84)
-        self.relu4 = nn.ReLU()
-        self.fc3 = nn.Linear(84, 10)
-        self.relu5 = nn.ReLU()
+        super(BrnFirstExit, self).__init__()
+        self.first_exit = nn.Sequential(
+            nn.Conv2d(1, 5, kernel_size=5,stride=1,padding=4,bias=False),
+            nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            nn.ReLU(),
+            nn.Conv2d(5, 10, kernel_size=3,stride=1,padding=1,bias=False),
+            nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(640, 10)#, bias=False)
+        )
 
     def forward(self, x):
-        y = self.conv1(x)
-        y = self.relu1(y)
-        y = self.pool1(y)
-        y = self.conv2(y)
-        y = self.relu2(y)
-        y = self.pool2(y)
-        y = self.fltn(y)
-        y = self.fc1(y)
-        y = self.relu3(y)
-        y = self.fc2(y)
-        y = self.relu4(y)
-        y = self.fc3(y)
-        y = self.relu5(y)
+        y = [self.first_exit(x)] #NOTE put in list to reuse training code
+        return y
+
+class BrnSecondExit(nn.Module):
+    # backbone up to second exit of branchy-lenet model, and second exit
+    def __init__(self):
+        super(BrnSecondExit, self).__init__()
+        self.second_exit = nn.Sequential(
+            #bb common to both exits - removed if only exit required
+            nn.Conv2d(1, 5, kernel_size=5,stride=1,padding=4),#,bias=False),
+            nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            nn.ReLU(),
+
+            nn.Conv2d(5, 10, kernel_size=5,stride=1,padding=4),#,bias=False),
+            nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            nn.ReLU(),
+            nn.Conv2d(10, 20, kernel_size=5,stride=1,padding=3),#,bias=False),
+            nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            nn.ReLU(),
+
+            nn.Flatten(),
+            nn.Linear(720, 84),#, bias=False),
+            nn.Linear(84,10)#, bias=False)
+        )
+
+    def forward(self, x):
+        y = [self.second_exit(x)] #NOTE put in list to reuse training code
+        return y
+
+class Testnet(nn.Module):
+    #test network
+    def __init__(self):
+        super(Testnet, self).__init__()
+        self.testnet = nn.Sequential(
+            nn.Conv2d(1, 5, kernel_size=5,stride=1,padding=4,bias=False),
+            #nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            #nn.ReLU(),
+            #nn.Conv2d(5, 10, kernel_size=3,stride=1,padding=1,bias=False),
+            #nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            #nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(5120, 10)#, bias=False)
+        )
+
+    def forward(self, x):
+        y = [self.testnet(x)]#self.conv1(x)
+        #y = self.relu1(y)
+        #y = self.pool1(y)
+        #y = self.conv2(y)
+        #y = self.relu2(y)
+        #y = self.pool2(y)
+        #y = self.fltn(y)
+        #y = self.fc1(y)
+        #y = self.relu3(y)
+        #y = self.fc2(y)
+        #y = self.relu4(y)
+        #y = self.fc3(y)
+        #y = self.relu5(y)
         return y

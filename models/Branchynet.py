@@ -43,10 +43,10 @@ class ConvPoolAc(nn.Module):
 #    return res
 
 #Main Network
-class Branchynet(nn.Module):
+class B_Lenet(nn.Module):
 
     def __init__(self, exit_threshold=0.5):
-        super(Branchynet, self).__init__()
+        super(B_Lenet, self).__init__()
 
         # call function to build layers
             #probably need to fragment the model into a moduleList
@@ -95,7 +95,7 @@ class Branchynet(nn.Module):
         bb_layers.append(ConvPoolAc(10, 20,
                             kernel=5, stride=1, padding=3) )
         bb_layers.append(nn.Flatten())
-        bb_layers.append(nn.Linear(720, 84)) #NOTE original was 720
+        bb_layers.append(nn.Linear(720, 84, bias=False)) #NOTE original was 720
 
         remaining_backbone_layers = nn.Sequential(*bb_layers)
         self.backbone.append(remaining_backbone_layers)
@@ -109,7 +109,7 @@ class Branchynet(nn.Module):
             #nn.ReLU(True),
             ConvPoolAc(5, 10, kernel=3, stride=1, padding=1), #, p_ceil_mode=True),
             nn.Flatten(),
-            nn.Linear(640,10), # NOTE original was 640 #insize,outsize - make variable on num of classes
+            nn.Linear(640,10, bias=False), # NOTE original was 640 #insize,outsize - make variable on num of classes
             #nn.Softmax(dim=-1)
         )
         self.exits.append(ee1)
@@ -117,7 +117,7 @@ class Branchynet(nn.Module):
         #final exit
         eeF = nn.Sequential(
             #nn.Flatten(), #not necessary but keeping to use trained models
-            nn.Linear(84,10),
+            nn.Linear(84,10, bias=False),
             #nn.Softmax(dim=-1)
         )
         self.exits.append(eeF)
@@ -126,10 +126,11 @@ class Branchynet(nn.Module):
         #evaluate the exit criterion on the result provided
         #return true if it can exit, false if it can't
         with torch.no_grad():
-            #pk = nn.functional.softmax(x, dim=-1)[-1]
+            #NOTE brn exits do not compute softmax in our case
+            pk = nn.functional.softmax(x, dim=-1)
             #apply scipy.stats.entropy for branchynet,
             #when they do theirs, its on a batch - same calc bu pt
-            entr = -torch.sum(pk * torch.log(x))
+            entr = -torch.sum(pk * torch.log(pk))
             #print("entropy:",entr)
             return entr < self.exit_threshold
 
@@ -155,15 +156,11 @@ class Branchynet(nn.Module):
         #std forward function - add var to distinguish be test and inf
 
         if self.fast_inference_mode:
-                #works for bs of 1
-                #assert(self.fast_inf_batch_size == 1)
-            #assert(x.shape[0] == 1)
             for bb, ee in zip(self.backbone, self.exits):
                 x = bb(x)
-                res = ee(x)
-                #res = to_ec
-                #if self.exit_criterion(to_ec):
+                res = ee(x) #res not changed by exit criterion
                 if self.exit_criterion_top1(res):
+                    #print("EE fired")
                     return res
             return res
 
