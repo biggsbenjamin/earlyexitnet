@@ -4,14 +4,13 @@ import torch.nn as nn
 #import numpy as np
 #from scipy.stats import entropy
 
-
 class ConvPoolAc(nn.Module):
-    def __init__(self, chanIn, chanOut, kernel=3, stride=1, padding=1, p_ceil_mode=False):
+    def __init__(self, chanIn, chanOut, kernel=3, stride=1, padding=1, p_ceil_mode=False,bias=True):
         super(ConvPoolAc, self).__init__()
 
         self.layer = nn.Sequential(
             nn.Conv2d(chanIn, chanOut, kernel_size=kernel,
-                stride=stride, padding=padding, bias=False),
+                stride=stride, padding=padding, bias=bias),
             nn.MaxPool2d(2, stride=2, ceil_mode=p_ceil_mode), #ksize, stride
             nn.ReLU(True)
         )
@@ -44,7 +43,6 @@ class ConvPoolAc(nn.Module):
 
 #Main Network
 class B_Lenet(nn.Module):
-
     def __init__(self, exit_threshold=0.5):
         super(B_Lenet, self).__init__()
 
@@ -64,61 +62,41 @@ class B_Lenet(nn.Module):
         self.exits = nn.ModuleList()
         self.exit_loss_weights = [1.0, 0.3] #weighting for each exit when summing loss
 
-        self.chansIn = [5,10]
-        self.chansOut = [10,20]
-
         #weight initialisiation - for standard layers this is done automagically
         self._build_backbone()
         self._build_exits()
 
     def _build_backbone(self):
         #Starting conv2d layer
-        #self.backbone.append(nn.Conv2d(1, 5, kernel_size=5, stride=1, padding=3)
+        c1 = nn.Conv2d(1, 5, kernel_size=5, stride=1, padding=3)
+        #down sampling is duplicated in original branchynet code
+        c1_down_samp_activ = nn.Sequential(
+                nn.MaxPool2d(2,stride=2),
+                nn.ReLU(True)
+                )
+        #remaining backbone
+        c2 = ConvPoolAc(5, 10, kernel=5, stride=1, padding=3, p_ceil_mode=True)
+        c3 = ConvPoolAc(10, 20, kernel=5, stride=1, padding=3, p_ceil_mode=True)
+        fc1 = nn.Sequential(nn.Flatten(), nn.Linear(720,84))
+        post_ee_layers = nn.Sequential(c1_down_samp_activ,c2,c3,fc1)
 
-        #after first exit
-        #post_exit= nn.Sequential(
-        #    nn.MaxPool2d(2, stride=2),
-        #    nn.ReLU(True)
-        #)
-        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=4)#NOTE was padding 3
-        self.backbone.append(strt_bl)
+        self.backbone.append(c1)
+        self.backbone.append(post_ee_layers)
 
-        #adding ConvPoolAc blocks - remaining backbone
-        #bb_layers = [post_exit] #include post exit 1 layers
-        bb_layers = []
-        #for cI, cO in zip(self.chansIn, self.chansOut): #TODO make input variable
-        #    bb_layer = ConvPoolAc(cI, cO,
-        #                    kernel=5, stride=1, padding=3) #, p_ceil_mode=True)
-        #    bb_layers.append(bb_layer)
-        bb_layers.append(ConvPoolAc(5, 10,
-                            kernel=5, stride=1, padding=4) )#NOTE was padding 3
-        bb_layers.append(ConvPoolAc(10, 20,
-                            kernel=5, stride=1, padding=3) )
-        bb_layers.append(nn.Flatten())
-        bb_layers.append(nn.Linear(720, 84, bias=False)) #NOTE original was 720
-
-        remaining_backbone_layers = nn.Sequential(*bb_layers)
-        self.backbone.append(remaining_backbone_layers)
-
-    def _build_exits(self):
-        #adding early exits/branches
-
+    def _build_exits(self): #adding early exits/branches
         #early exit 1
         ee1 = nn.Sequential(
-            #nn.MaxPool2d(2, stride=2), #ksize, stride
-            #nn.ReLU(True),
-            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1), #, p_ceil_mode=True),
+            nn.MaxPool2d(2, stride=2), #ksize, stride
+            nn.ReLU(True),
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1, p_ceil_mode=True),
             nn.Flatten(),
-            nn.Linear(640,10, bias=False), # NOTE original was 640 #insize,outsize - make variable on num of classes
-            #nn.Softmax(dim=-1)
+            nn.Linear(640,10, bias=False),
         )
         self.exits.append(ee1)
 
         #final exit
         eeF = nn.Sequential(
-            #nn.Flatten(), #not necessary but keeping to use trained models
             nn.Linear(84,10, bias=False),
-            #nn.Softmax(dim=-1)
         )
         self.exits.append(eeF)
 
@@ -188,3 +166,67 @@ class B_Lenet(nn.Module):
             self.eval()
         self.fast_inference_mode = mode
 
+#FPGAConvNet friendly version:
+#ceiling mode flipped, FC layer sizes adapted, padding altered,removed duplicated layers
+class B_Lenet_fcn(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=4)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=4) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=3) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 84, bias=False))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(640,10, bias=False),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10, bias=False),
+        )
+        self.exits.append(eeF)
+
+#Simplified exit version:
+#stacks on _fcn changes, removes the conv
+class B_Lenet_se(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=4)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=4) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=3) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 84, bias=False))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(1280,10, bias=False),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10, bias=False),
+        )
+        self.exits.append(eeF)

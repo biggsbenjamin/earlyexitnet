@@ -14,9 +14,12 @@ def main():
 
     parser.add_argument('-m','--model_name',
             choices=[   'b_lenet',
+                        'b_lenet_fcn',
+                        'b_lenet_se',
                         'lenet',
                         'testnet',
                         'brnfirst',
+                        'brnfirst_se',
                         'brnsecond',
                         ],
             required=True, help='select the model name')
