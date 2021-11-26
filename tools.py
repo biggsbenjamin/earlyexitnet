@@ -13,9 +13,10 @@ from datetime import datetime as dt
 ###### Data set functions ######
 ################################
 
-class MNISTDataColl():
+class DataColl:
     def __init__(self,
             batch_size_train=64,
+            batch_size_valid=64,
             batch_size_test=1,
             normalise=False,
             k_cv=None,
@@ -36,14 +37,7 @@ class MNISTDataColl():
         self.has_valid = True if v_split is not None or k_cv is not None else False
         self.single_split = True if v_split is not None else False
 
-        #standard transform for MNIST
-        self.tfs = transforms.Compose([transforms.ToTensor()])
-        #full training set, no normalisation
-        self.full_train_set = torchvision.datasets.MNIST('../data/mnist',
-            download=True, train=True, transform=self.tfs)
-        #full testing set
-        self.full_test_set = torchvision.datasets.MNIST('../data/mnist',
-                download=True, train=False, transform=self.tfs)
+        self._load_sets()
 
         #torchvision datasets (dataloader precursors)
         self.train_set = None
@@ -59,6 +53,13 @@ class MNISTDataColl():
         self.test_dl = None
         self.get_test_dl()
         return
+    def _load_sets(self):
+        self.tfs = None
+        #full training set, no normalisation
+        self.full_train_set = None
+        #full testing set
+        self.full_test_set = None
+        NameError("template class, no loading")
 
     #####  single split methods  #####
     def gen_train(self): #gen training sets, normalised or valid split defined here
@@ -127,6 +128,42 @@ class MNISTDataColl():
                     drop_last=True, shuffle=True)
         return self.test_dl
 
+class MNISTDataColl(DataColl):
+    def _load_sets(self):
+        #child version of function, MNIST specific
+        #standard transform for MNIST
+        self.tfs = transforms.Compose([transforms.ToTensor()])
+        #full training set, no normalisation
+        self.full_train_set = torchvision.datasets.MNIST('../data/mnist',
+            download=True, train=True, transform=self.tfs)
+        #full testing set
+        self.full_test_set = torchvision.datasets.MNIST('../data/mnist',
+                download=True, train=False, transform=self.tfs)
+
+class CIFAR10DataColl(DataColl):
+    def _load_sets(self):
+        #child version of function, CIFAR10 specific
+        #standard transform for CIFAR10
+        self.tfs = transforms.Compose([transforms.ToTensor()])
+        #full training set, no normalisation
+        self.full_train_set = torchvision.datasets.CIFAR10('../data/cifar10',
+            download=True, train=True, transform=self.tfs)
+        #full testing set
+        self.full_test_set = torchvision.datasets.CIFAR10('../data/cifar10',
+                download=True, train=False, transform=self.tfs)
+
+class CIFAR100DataColl(DataColl):
+    def _load_sets(self):
+        #child version of function, CIFAR100 specific
+        #standard transform for CIFAR100
+        self.tfs = transforms.Compose([transforms.ToTensor()])
+        #full training set, no normalisation
+        self.full_train_set = torchvision.datasets.CIFAR100('../data/cifar100',
+            download=True, train=True, transform=self.tfs)
+        #full testing set
+        self.full_test_set = torchvision.datasets.CIFAR100('../data/cifar100',
+                download=True, train=False, transform=self.tfs)
+
 ################################
 ######   Stat functions   ######
 ################################
@@ -193,10 +230,10 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
     ### stat functions ###
     def get_avg(self,return_list=False): #mean average
         if self.set_length is not None:
-            for i,length in enumerate(self.set_length_accum):
-                assert self.set_length == length,\
-                "specified set length:{} differs from accumulated:{} at index {}\
-                (might be more)".format(self.set_length,length,i)
+            #for i,length in enumerate(self.set_length_accum):
+            #    assert self.set_length == length,\
+            #    "specified set length:{} differs from accumulated:{} at index {}\
+            #    (might be more)".format(self.set_length,length,i)
             #use set_length
             divisor = self.set_length * self.batch_size
         else:
@@ -234,7 +271,7 @@ class AccuTracker(Tracker):
             ):
         #init vars
         super().__init__(batch_size,bins,set_length)
-    def _init_vars(self, #TODO can you overload func called in super?
+    def _init_vars(self, #NOTE can you overloaded parent function
             batch_size,
             bins,
             set_length=None):
@@ -252,7 +289,13 @@ class AccuTracker(Tracker):
 
     ### functions to use ###
     def update_correct(self,result,label,bin_index=None): #for single iteration
-        count = self.get_num_correct(result,label)
+        if bin_index is None and len(result) > 1 and self.bin_num > 1:
+            count = [self.get_num_correct(val,label) for val in result]
+        else:
+            if isinstance(result, list):
+                count = self.get_num_correct(result[0],label)
+            else:
+                count = self.get_num_correct(result,label)
         super().add_val(count,bin_index)
 
     def update_correct_list(self,res_list,lab_list=None): #list of lists of lists
@@ -263,6 +306,8 @@ class AccuTracker(Tracker):
                                         for label,results in zip(lab_list,res_list)])
         else:
             super().add_vals(res_list)
+    def get_accu(self,return_list=False):
+        return super().get_avg(return_list)
 
 #calibration (measuring confidence, correcting over/under confidence)
 
@@ -313,3 +358,28 @@ def load_model(model, path):
     #epoch = checkpoint['epoch']
     #loss = checkpoint['loss']
 
+################################
+######  Helper functions  ######
+################################
+def probe_params(model):
+    #probe params to double check only backbone run
+    print("backbone 1st conv")
+    print([param for param in model.backbone[0].parameters()])
+    print("backbone last linear")
+    print([param for param in model.exits[-1].parameters()])
+    print("exit 1")
+    print([param for param in model.exits[0].parameters()])
+
+#checks the shape of the input and output of the model
+def shape_test(model, dims_in, dims_out, loss_function=nn.CrossEntropyLoss()):
+    rand_in = torch.rand(tuple([1, *dims_in]))
+    rand_out = torch.rand(tuple([*dims_out])).long()
+
+    model.eval()
+    with torch.no_grad():
+        results = model(rand_in)
+        if isinstance(results, list):
+            losses = [loss_function(res, rand_out) for res in results ]
+        else:
+            losses = [loss_function(results, rand_out)]
+    return losses

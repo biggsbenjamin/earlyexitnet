@@ -1,10 +1,12 @@
 #training, testing for branchynet-pytorch version
 
-from models.Branchynet import B_Lenet, ConvPoolAc
+from models.Branchynet import ConvPoolAc,B_Lenet,B_Lenet_fcn,B_Lenet_se
 from models.Lenet import Lenet
-from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit
+from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, BrnFirstExit_se
 
-from tools import MNISTDataColl, LossTracker, AccuTracker, save_model, load_model
+from tools import MNISTDataColl, CIFAR10DataColl, CIFAR100DataColl
+from tools import Tracker, LossTracker, AccuTracker
+from tools import save_model, load_model
 
 import torch
 import torch.nn as nn
@@ -38,14 +40,11 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
 
         opt = optim.Adam(backbone_params, betas=exp_decay_rates, lr=lr)
 
-    #probe params to double check only backbone run
-    #probe_params(model) #satisfied that setting specific params works right
-
     best_val_loss = [1.0, '']
     trainloss_trk = LossTracker(batch_size,1)
     trainaccu_trk = AccuTracker(batch_size,1)
-    validloss_trk = LossTracker(batch_size,2)
-    validaccu_trk = AccuTracker(batch_size,2)
+    validloss_trk = LossTracker(batch_size,1)
+    validaccu_trk = AccuTracker(batch_size,1)
 
     for epoch in range(epochs):
         model.train()
@@ -72,49 +71,27 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
             loss.backward()
             opt.step()
 
-            train_loss+=loss.item()
-            correct_count+=get_num_correct(results[-1],yb)
-
             trainloss_trk.add_loss(loss.item())
             trainaccu_trk.update_correct(results[-1],yb)
 
-        tr_loss_avg = train_loss / (len(train_dl)*batch_size)
-        t1acc = correct_count / (len(train_dl)*batch_size)
-
-        trk_tr_loss_avg = trainloss_trk.get_avg(return_list=True)[-1]
-        trk_t1acc = trainaccu_trk.get_avg(return_list=True)[-1]
-
-        assert tr_loss_avg == trk_tr_loss_avg, f"{tr_loss_avg} {trk_tr_loss_avg}"
-        assert t1acc == trk_t1acc, f"{t1acc} {trk_t1acc}"
+        tr_loss_avg = trainloss_trk.get_avg(return_list=True)[-1]
+        t1acc = trainaccu_trk.get_avg(return_list=True)[-1]
 
         #validation
         model.eval()
         with torch.no_grad():
-            vloss_ls = [[loss_f(exit, yb) for exit in model(xb)]
-                        for xb, yb in valid_dl]
-            vaccu_ls = [[get_num_correct(exit, yb) for exit in model(xb)]
-                        for xb, yb in valid_dl]
+            for xb,yb in valid_dl:
+                res_v = model(xb)
+                validloss_trk.add_loss([loss_f(exit, yb) for exit in res_v])
+                validaccu_trk.update_correct(res_v,yb)
 
-            valid_losses = np.sum(np.array(vloss_ls), axis=0)
-            valid_accus = np.sum(np.array(vaccu_ls), axis=0)
-
-            validloss_trk.add_losses(vloss_ls)
-            validaccu_trk.update_correct_list(vaccu_ls)
-
-        val_loss_avg = valid_losses[-1] / (len(valid_dl)*batch_size)
-        val_accu_avg = valid_accus[-1] / (len(valid_dl)*batch_size)
-        print(len(valid_dl)*batch_size)
-
-        trk_val_loss_avg = validloss_trk.get_avg(return_list=True)[-1]
-        trk_val_accu_avg = validaccu_trk.get_avg(return_list=True)[-1]
-
-        assert val_loss_avg == trk_val_loss_avg, f"{val_loss_avg} {trk_val_loss_avg}"
-        assert val_accu_avg == trk_val_accu_avg, f"{val_accu_avg} {trk_val_accu_avg}"
+        val_loss_avg = validloss_trk.get_avg(return_list=True)[-1]
+        val_accu_avg = validaccu_trk.get_avg(return_list=True)[-1]
 
         print(  "T Loss:",tr_loss_avg,
-                "T1 Acc: ", t1acc,
-                "V Loss:", val_loss_avg)
-        #probe_params(model)
+                "T T1 Acc: ", t1acc,
+                "V Loss:", val_loss_avg,
+                "V T1 Acc:", val_accu_avg)
         if dat_norm:
             file_prefix = "dat_norm-backbone-"
         else:
@@ -170,17 +147,25 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
         opt = optim.Adam(model.parameters(), betas=exp_decay_rates, lr=lr)
 
     best_val_loss = [[1.0,1.0], ''] #TODO make sure list size matches num of exits
+    train_loss_trk = LossTracker(train_dl.batch_size,bins=2)
+    train_accu_trk = AccuTracker(train_dl.batch_size,bins=2)
+    valid_loss_trk = LossTracker(valid_dl.batch_size,bins=2)
+    valid_accu_trk = AccuTracker(valid_dl.batch_size,bins=2)
     for epoch in range(joint_epochs):
         model.train()
         print("starting epoch:", epoch+1, end="... ", flush=True)
         train_loss = [0.0,0.0]
         correct_count = [0,0]
+        train_loss_trk.reset_tracker()
+        train_accu_trk.reset_tracker()
         #training loop
         for xb, yb in train_dl:
             results = model(xb)
 
-            losses = [weighting * loss_f(res, yb)
-                        for weighting, res in zip(model.exit_loss_weights,results)]
+            raw_losses = [loss_f(res,yb) for res in results]
+
+            losses = [weighting * raw_loss
+                        for weighting, raw_loss in zip(model.exit_loss_weights,raw_losses)]
 
             opt.zero_grad()
             #backward
@@ -190,142 +175,163 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
             opt.step()
 
             for i,_ in enumerate(train_loss):
+                #weighted losses
                 train_loss[i]+=losses[i].item()
-                correct_count[i]+=get_num_correct(results[i], yb)
+            #raw losses
+            train_loss_trk.add_loss([exit_loss.item() for exit_loss in raw_losses])
+            train_accu_trk.update_correct(results,yb)
 
-        tr_loss_avg = [loss/(len(train_dl)*batch_size) for loss in train_loss]
-        t1acc = [corr/(len(train_dl)*batch_size) for corr in correct_count]
+
+        tr_loss_avg_weighted = [loss/(len(train_dl)*batch_size) for loss in train_loss]
+        tr_loss_avg = train_loss_trk.get_avg(return_list=True)
+        t1acc = train_accu_trk.get_accu(return_list=True)
 
         #validation
         model.eval()
         with torch.no_grad():
-            valid_losses = np.sum(np.array(
-                    [[loss_f(exit, yb) for exit in model(xb)]
-                        for xb, yb in valid_dl]), axis=0)
+            for xb,yb in valid_dl:
+                res = model(xb)
+                valid_loss_trk.add_loss([loss_f(exit, yb) for exit in res])
+                valid_accu_trk.update_correct(res,yb)
 
+        val_loss_avg = valid_loss_trk.get_avg(return_list=True)
+        val_accu_avg = valid_accu_trk.get_accu(return_list=True)
 
-        val_loss_avg = valid_losses / (len(valid_dl)*batch_size)
-        print("t loss:", tr_loss_avg, "t1acc: ", t1acc, " v loss:", val_loss_avg)
+        print("raw t loss:{} t1acc:{}\nraw v loss:{} v accu:{}".format(
+            tr_loss_avg,t1acc,val_loss_avg,val_accu_avg))
         if dat_norm:
             prefix = "dat_norm-"+prefix
         savepoint = save_model(model, spth, file_prefix=prefix+'-'+str(epoch+1), opt=opt)
 
         el_total=0.0
         bl_total=0.0
-        #TODO add in the weighting for the losses
         for exit_loss, best_loss,l_w in zip(val_loss_avg,best_val_loss[0],model.exit_loss_weights):
             el_total+=exit_loss*l_w
             bl_total+=best_loss*l_w
+        #selecting "best" network
         if el_total < bl_total:
             best_val_loss[0] = val_loss_avg
             best_val_loss[1] = savepoint
-        #NOTE not using total loss now, using first exit loss
-        #if val_loss_avg[0] < best_val_loss[0][0]:
-        #    best_val_loss[0] = val_loss_avg
-        #    best_val_loss[1] = savepoint
-
     print("BEST* VAL LOSS: ", best_val_loss[0], " for epoch: ", best_val_loss[1])
     #return best val loss path link
     return best_val_loss[1],savepoint
 
-def test(model,test_dl, loss_f=nn.CrossEntropyLoss(),ee_net=False):
-    #if ee_net is false then there is only one exit to the network
-    #FIXME make this work for one exit
+class Tester:
+    def __init__(self,model,test_dl,loss_f=nn.CrossEntropyLoss(),exits=2):
+        self.model=model
+        self.test_dl=test_dl
+        self.loss_f=loss_f
+        self.exits=exits
+        self.sample_total = len(test_dl)
+        if exits > 1:
+            #TODO make thresholds a param
+            #setting top1acc threshold for exiting (final exit set to 0)
+            self.top1acc_thresholds = [0.995,0]
+            #setting entropy threshold for exiting (final exit set to LARGE)
+            self.entropy_thresholds = [0.025,1000000]
+            #set up stat trackers
+            #samples exited
+            self.exit_track_top1 = Tracker(test_dl.batch_size,exits,self.sample_total)
+            self.exit_track_entr = Tracker(test_dl.batch_size,exits,self.sample_total)
+            #individual accuracy over samples exited
+            self.accu_track_top1 = AccuTracker(test_dl.batch_size,exits)
+            self.accu_track_entr = AccuTracker(test_dl.batch_size,exits)
 
-    #setting top1acc threshold for exiting (final exit set to 0)
-    e_thr_top1 = [0.995,0]
-    e_bins_top1 = [0,0]
-    assert len(e_thr_top1) == len(e_bins_top1),"threshold & bin mismatch - top1accuracy"
-    #setting entropy threshold for exiting (final exit set to LARGE)
-    e_thr_entr = [0.025,1000000]
-    e_bins_entr = [0,0]
-    assert len(e_thr_entr) == len(e_bins_entr),"threshold & bin mismatch - entropy"
+        #total exit accuracy over the test data
+        self.accu_track_totl = AccuTracker(test_dl.batch_size,exits,self.sample_total)
 
-    #run fast inference on test set
-    #for the time being, run on one sample at a time
-    sample_total = len(test_dl)
-    print("test length:",sample_total)
-    test_iter = iter(test_dl)
-    model.eval()
+        self.top1_pc = None # % exit for top1 confidence
+        self.entr_pc = None # % exit for entropy confidence
+        self.top1_accu = None #accuracy of exit over exited samples
+        self.entr_accu = None #accuracy of exit over exited samples
+        self.full_exit_accu = None #accuracy of the exits over all samples
+        self.top1_accu_tot = None #total accuracy of network given exit strat
+        self.entr_accu_tot = None #total accuracy of network given exit strat
 
-    correct_count_top1 = [0,0]
-    correct_count_entr = [0,0]
-    with torch.no_grad():
-        for s_idx in range(sample_total): #small test to check exit function
-            #print("sample index",s_idx)
-            xb, yb = next(test_iter)
+    def _test_multi_exit(self):
+        self.model.eval()
+        with torch.no_grad():
+            for xb,yb in self.test_dl:
+                res = self.model(xb)
+                accu_track_totl.update_correct(res,yb)
+                for i,(exit,thr) in enumerate(zip(res,e_thr_top1)):
+                    softmax = nn.functional.softmax(exit,dim=-1)
+                    sftmx_max = torch.max(softmax)
+                    if sftmx_max > thr:
+                        #print("top1 exited at exit {}".format(i))
+                        self.exit_track_top1.add_val(1,i)
+                        self.accu_track_top1.update_correct(exit,yb,bin_index=i)
+                        break
+                for i,(exit,thr) in enumerate(zip(res,e_thr_entr)):
+                    softmax = nn.functional.softmax(exit,dim=-1)
+                    entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
+                    if entr < thr:
+                        #print("entr exited at exit {}".format(i))
+                        self.exit_track_entr.add_val(1,i)
+                        self.accu_track_entr.update_correct(exit,yb,bin_index=i)
+                        break
+    def _test_single_exit(self):
+        self.model.eval()
+        with torch.no_grad():
+            for xb,yb in self.test_dl:
+                res = self.model(xb)
+                self.accu_track_totl.update_correct(res,yb)
+    def debug_values(self):
+        self.model.eval()
+        with torch.no_grad():
+            for xb,yb in test_dl:
+                res = self.model(xb)
+                for i,exit in enumerate(res):
+                    #print("raw exit {}: {}".format(i, exit))
+                    softmax = nn.functional.softmax(exit,dim=-1)
+                    #print("softmax exit {}: {}".format(i, softmax))
+                    sftmx_max = torch.max(softmax)
+                    print("exit {} max softmax: {}".format(i, sftmx_max))
+                    entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
+                    print("exit {} entropy: {}".format(i, entr))
+                    #print("exit CE loss: {}".format(loss_f(exit,yb)))
 
-            exits = model(xb)
-            #for i,exit in enumerate(exits):
-            #    #print("raw exit {}: {}".format(i, exit))
-            #    softmax = nn.functional.softmax(exit,dim=-1)
-            #    #print("softmax exit {}: {}".format(i, softmax))
-            #    sftmx_max = torch.max(softmax)
-            #    print("exit {} max softmax: {}".format(i, sftmx_max))
-            #    entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
-            #    print("exit {} entropy: {}".format(i, entr))
-            #    #print("exit CE loss: {}".format(loss_f(exit,yb)))
-
-            for i,(exit,thr) in enumerate(zip(exits,e_thr_top1)):
-                softmax = nn.functional.softmax(exit,dim=-1)
-                sftmx_max = torch.max(softmax)
-                if sftmx_max > thr:
-                    #print("top1 exited at exit {}".format(i))
-                    e_bins_top1[i]+=1
-                    correct_count_top1[i]+=get_num_correct(exit,yb)
-                    break
-
-            for i,(exit,thr) in enumerate(zip(exits,e_thr_entr)):
-                softmax = nn.functional.softmax(exit,dim=-1)
-                entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
-                if entr < thr:
-                    #print("entr exited at exit {}".format(i))
-                    e_bins_entr[i]+=1
-                    correct_count_entr[i]+=get_num_correct(exit,yb)
-                    break
-
-
-    assert sample_total == sum(e_bins_top1), f"too many or too few exits - top1 {e_bins_top1}"
-    assert sample_total == sum(e_bins_entr), f"too many or too few exits - entr {e_bins_entr}"
-
-    #working out percentage exit
-    #top1 method
-    t1pc = [(bins*100)/sample_total for bins in e_bins_top1]
-
-    #entropy method
-    entpc = [(bins*100)/sample_total for bins in e_bins_entr]
-
-    #exit accuracies for different methods
-    t1acc = [corr/ex_tot for corr,ex_tot in zip(correct_count_top1,e_bins_top1)]
-    entra = [corr/ex_tot for corr,ex_tot in zip(correct_count_entr,e_bins_entr)]
-
-    t1acc_tot = sum(correct_count_top1)/sample_total
-    entra_tot = sum(correct_count_entr)/sample_total
-
-    #test_losses = np.sum(np.array(
-    #        [[loss_f(exit, yb) for exit in model(xb)]
-    #            for xb, yb in valid_dl]), axis=0)
-
-    #TODO save test stats along with link to saved model
-    return t1pc, entpc, sample_total,t1acc,entra,t1acc_tot,entra_tot
+    def test(self):
+        print(f"Test of  length {self.sample_total} starting")
+        if self.exits > 1:
+            self._test_multi_exit()
+            self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
+            self.entr_pc = self.exit_track_entr.get_avg(return_list=True)
+            self.top1_accu = self.accu_track_top1.get_accu(return_list=True)
+            self.entr_accu = self.accu_track_entr.get_accu(return_list=True)
+            self.top1_accu_tot = self.np.sum(accu_track_top1.val_bins)/sample_total
+            self.entr_accu_tot = self.np.sum(accu_track_entr.val_bins)/sample_total
+        else:
+            self._test_single_exit()
+        #accuracy of each exit over FULL data set
+        self.full_exit_accu = self.accu_track_totl.get_accu(return_list=True)
+        #TODO save test stats along with link to saved model
 
 def train_n_test(args):
     #shape testing
     #print(shape_test(model, [1,28,28], [1])) #output is not one hot encoded
 
-    ee_net = False # set to true when dealing with a branching network
+    exits = 1 # set number of exits
     #set up the model specified in args
     if args.model_name == 'lenet':
         model = Lenet()
     elif args.model_name == 'testnet':
         model = Testnet()
-    elif args.model_name == 'brnfirst':
-        model = Testnet()
-    elif args.model_name == 'brnsecond':
-        model = Testnet()
+    elif args.model_name == 'brnfirst': #fcn version
+        model = BrnFirstExit()
+    elif args.model_name == 'brnsecond': #fcn version
+        model = BrnSecondExit()
+    elif args.model_name == 'brnfirst_se': #fcn version
+        model = BrnFirstExit_se()
     elif args.model_name == 'b_lenet':
         model = B_Lenet()
-        ee_net = True
+        exits = 2
+    elif args.model_name == 'b_lenet_fcn':
+        model = B_Lenet_fcn()
+        exits = 2
+    elif args.model_name == 'b_lenet_fcn':
+        model = B_Lenet_se()
+        exits = 2
     else:
         raise NameError("Model not supported")
     print("Model done:", args.model_name)
@@ -360,7 +366,7 @@ def train_n_test(args):
         path_str = 'outputs/'
         print("backbone epochs: {} joint epochs: {}".format(args.bb_epochs, args.jt_epochs))
 
-        if ee_net:
+        if exits > 1:
             save_path,last_path = train_joint(model, train_dl, valid_dl, batch_size_train, path_str,
                     backbone_epochs=args.bb_epochs,joint_epochs=args.jt_epochs, loss_f=loss_f,
                     pretrain_backbone=True,dat_norm=normalise)
@@ -373,7 +379,7 @@ def train_n_test(args):
 
             path_str = f'outputs/bb_only/'
             save_path,last_path = train_backbone(model, train_dl, valid_dl,
-                    batch_size=batch_size, save_path=path_str, epochs=args.bb_epochs,
+                    batch_size=batch_size_train, save_path=path_str, epochs=args.bb_epochs,
                     loss_f=loss_f, opt=opt, dat_norm=normalise)
 
         #save some notes about the run
@@ -382,7 +388,8 @@ def train_n_test(args):
             notes.write("bb epochs {}, jt epochs {}\n".format(args.bb_epochs, args.jt_epochs))
             notes.write("Training batch size {}, Test batchsize {}\n".format(batch_size_train,
                                                                            batch_size_test))
-            notes.write("model training exit weights:"+str(model.exit_loss_weights))
+            if hasattr(model,'exit_loss_weights'):
+                notes.write("model training exit weights:"+str(model.exit_loss_weights))
             notes.write("Path to last model:"+str(last_path)+"\n")
         notes.close()
 
@@ -391,20 +398,35 @@ def train_n_test(args):
 
     test_dl = datacoll.get_test_dl()
     #once trained, run it on the test data
-    top1_pc,entropy_pc,test_size,top1acc,entracc,t1_tot_acc,ent_tot_acc =\
-            test(model,test_dl,loss_f,ee_net)
+    net_test = Tester(model,test_dl,loss_f,exits)
+    net_test.test()
+    #get test results
+    test_size = net_test.sample_total
+    top1_pc = net_test.top1_pc
+    entropy_pc = net_test.entr_pc
+    top1acc = net_test.top1_accu
+    entracc = net_test.entr_accu
+    t1_tot_acc = net_test.top1_accu_tot
+    ent_tot_acc = net_test.entr_accu_tot
+    full_exit_accu = net_test.full_exit_accu
     #get percentage exits and avg accuracies, add some timing etc.
     print("top1 exit %s {},  entropy exit %s {}".format(top1_pc, entropy_pc))
-    print("SPLIT: top1 exit acc % {}, entropy exit acc % {}".format(top1acc, entracc))
-    print("COMBINED: top1 acc % {}, entr acc % {}".format(t1_tot_acc,ent_tot_acc))
+    print("Accuracy over exited samples:")
+    print("top1 exit acc % {}, entropy exit acc % {}".format(top1acc, entracc))
+    print("Accuracy over network:")
+    print("top1 acc % {}, entr acc % {}".format(t1_tot_acc,ent_tot_acc))
+    print("Accuracy of the individual exits over full set: {}".format(full_exit_accu))
 
     with open(notes_path, 'a') as notes:
-        notes.write("\nTesting results:\n")
+        notes.write(f"\nTesting results: for {args.model_name}\n")
         notes.write("Test sample size: {}\n".format(test_size))
         notes.write("top1 exit %s {}, entropy exit %s {}\n".format(top1_pc, entropy_pc))
         notes.write("best* model "+save_path)
-        notes.write("SPLIT: top1 exit acc % {}, entropy exit acc % {}\n".format(top1acc, entracc))
-        notes.write("COMBINED: top1 acc % {}, entr acc % {}\n".format(t1_tot_acc,ent_tot_acc))
+        notes.write("Accuracy over exited samples:\n")
+        notes.write("top1 exit acc % {}, entropy exit acc % {}\n".format(top1acc, entracc))
+        notes.write("Accuracy over EE network:\n")
+        notes.write("top1 acc % {}, entr acc % {}\n".format(t1_tot_acc,ent_tot_acc))
+        notes.write("Accuracy of the individual exits over full set: {}\n".format(full_exit_accu))
 
         if args.run_notes is not None:
             notes.write(args.run_notes)
