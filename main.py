@@ -41,6 +41,7 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
         opt = optim.Adam(backbone_params, betas=exp_decay_rates, lr=lr)
 
     best_val_loss = [1.0, '']
+    best_val_accu = [0.0, '']
     trainloss_trk = LossTracker(batch_size,1)
     trainaccu_trk = AccuTracker(batch_size,1)
     validloss_trk = LossTracker(batch_size,1)
@@ -82,10 +83,10 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
         with torch.no_grad():
             for xb,yb in valid_dl:
                 res_v = model(xb)
-                validloss_trk.add_loss([loss_f(exit, yb) for exit in res_v])
-                validaccu_trk.update_correct(res_v,yb)
+                validloss_trk.add_loss(loss_f(res_v[-1], yb))
+                validaccu_trk.update_correct(res_v[-1],yb)
 
-        val_loss_avg = validloss_trk.get_avg(return_list=True)[-1]
+        val_loss_avg = validloss_trk.get_avg(return_list=True)[-1]#should be last of 1
         val_accu_avg = validaccu_trk.get_avg(return_list=True)[-1]
 
         print(  "T Loss:",tr_loss_avg,
@@ -96,13 +97,19 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
             file_prefix = "dat_norm-backbone-"
         else:
             file_prefix = "backbone-"
-        savepoint = save_model(model, save_path, file_prefix=file_prefix+str(epoch+1), opt=opt)
+        savepoint = save_model(model, save_path, file_prefix=file_prefix+str(epoch+1), opt=opt,
+                tloss=tr_loss_avg,vloss=val_loss_avg,taccu=t1acc,vaccu=val_accu_avg)
 
         if val_loss_avg < best_val_loss[0]:
             best_val_loss[0] = val_loss_avg
             best_val_loss[1] = savepoint
+        if val_accu_avg > best_val_accu[0]:
+            best_val_accu[0] = val_accu_avg
+            best_val_accu[1] = savepoint
     print("BEST VAL LOSS: ", best_val_loss[0], " for epoch: ", best_val_loss[1])
-    return best_val_loss[1], savepoint #link to best val loss model
+    print("BEST VAL ACCU: ", best_val_accu[0], " for epoch: ", best_val_accu[1])
+    #return best_val_loss[1], savepoint #link to best val loss model
+    return best_val_accu[1], savepoint #link to best val accu model - trying for now
 
 def train_exits(model, epochs=100):
     #train the exits alone
@@ -147,6 +154,7 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
         opt = optim.Adam(model.parameters(), betas=exp_decay_rates, lr=lr)
 
     best_val_loss = [[1.0,1.0], ''] #TODO make sure list size matches num of exits
+    best_val_accu = [[0.0,0.0], ''] #TODO make sure list size matches num of exits
     train_loss_trk = LossTracker(train_dl.batch_size,bins=2)
     train_accu_trk = AccuTracker(train_dl.batch_size,bins=2)
     valid_loss_trk = LossTracker(valid_dl.batch_size,bins=2)
@@ -201,7 +209,8 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
             tr_loss_avg,t1acc,val_loss_avg,val_accu_avg))
         if dat_norm:
             prefix = "dat_norm-"+prefix
-        savepoint = save_model(model, spth, file_prefix=prefix+'-'+str(epoch+1), opt=opt)
+        savepoint = save_model(model, spth, file_prefix=prefix+'-'+str(epoch+1), opt=opt,
+            tloss=tr_loss_avg,vloss=val_loss_avg,taccu=t1acc,vaccu=val_accu_avg)
 
         el_total=0.0
         bl_total=0.0
@@ -212,9 +221,22 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
         if el_total < bl_total:
             best_val_loss[0] = val_loss_avg
             best_val_loss[1] = savepoint
+
+        ea_total=0.0
+        ba_total=0.0
+        for exit_accu, best_accu,l_w in zip(val_accu_avg,best_val_accu[0],model.exit_loss_weights):
+            ea_total+=exit_accu*l_w
+            ba_total+=best_accu*l_w
+        #selecting "best" network
+        if ea_total > ba_total:
+            best_val_accu[0] = val_accu_avg
+            best_val_accu[1] = savepoint
+
     print("BEST* VAL LOSS: ", best_val_loss[0], " for epoch: ", best_val_loss[1])
+    print("BEST* VAL ACCU: ", best_val_accu[0], " for epoch: ", best_val_accu[1])
     #return best val loss path link
-    return best_val_loss[1],savepoint
+    #return best_val_loss[1],savepoint
+    return best_val_accu[1],savepoint
 
 class Tester:
     def __init__(self,model,test_dl,loss_f=nn.CrossEntropyLoss(),exits=2):
@@ -253,8 +275,8 @@ class Tester:
         with torch.no_grad():
             for xb,yb in self.test_dl:
                 res = self.model(xb)
-                accu_track_totl.update_correct(res,yb)
-                for i,(exit,thr) in enumerate(zip(res,e_thr_top1)):
+                self.accu_track_totl.update_correct(res,yb)
+                for i,(exit,thr) in enumerate(zip(res,self.top1acc_thresholds)):
                     softmax = nn.functional.softmax(exit,dim=-1)
                     sftmx_max = torch.max(softmax)
                     if sftmx_max > thr:
@@ -262,7 +284,7 @@ class Tester:
                         self.exit_track_top1.add_val(1,i)
                         self.accu_track_top1.update_correct(exit,yb,bin_index=i)
                         break
-                for i,(exit,thr) in enumerate(zip(res,e_thr_entr)):
+                for i,(exit,thr) in enumerate(zip(res,self.entropy_thresholds)):
                     softmax = nn.functional.softmax(exit,dim=-1)
                     entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
                     if entr < thr:
@@ -299,8 +321,8 @@ class Tester:
             self.entr_pc = self.exit_track_entr.get_avg(return_list=True)
             self.top1_accu = self.accu_track_top1.get_accu(return_list=True)
             self.entr_accu = self.accu_track_entr.get_accu(return_list=True)
-            self.top1_accu_tot = self.np.sum(accu_track_top1.val_bins)/sample_total
-            self.entr_accu_tot = self.np.sum(accu_track_entr.val_bins)/sample_total
+            self.top1_accu_tot = np.sum(self.accu_track_top1.val_bins)/self.sample_total
+            self.entr_accu_tot = np.sum(self.accu_track_entr.val_bins)/self.sample_total
         else:
             self._test_single_exit()
         #accuracy of each exit over FULL data set
@@ -321,7 +343,7 @@ def train_n_test(args):
         model = BrnFirstExit()
     elif args.model_name == 'brnsecond': #fcn version
         model = BrnSecondExit()
-    elif args.model_name == 'brnfirst_se': #fcn version
+    elif args.model_name == 'brnfirst_se': #se version
         model = BrnFirstExit_se()
     elif args.model_name == 'b_lenet':
         model = B_Lenet()
@@ -329,7 +351,7 @@ def train_n_test(args):
     elif args.model_name == 'b_lenet_fcn':
         model = B_Lenet_fcn()
         exits = 2
-    elif args.model_name == 'b_lenet_fcn':
+    elif args.model_name == 'b_lenet_se':
         model = B_Lenet_se()
         exits = 2
     else:
@@ -367,9 +389,9 @@ def train_n_test(args):
         print("backbone epochs: {} joint epochs: {}".format(args.bb_epochs, args.jt_epochs))
 
         if exits > 1:
-            save_path,last_path = train_joint(model, train_dl, valid_dl, batch_size_train, path_str,
-                    backbone_epochs=args.bb_epochs,joint_epochs=args.jt_epochs, loss_f=loss_f,
-                    pretrain_backbone=True,dat_norm=normalise)
+            save_path,last_path = train_joint(model, train_dl, valid_dl, batch_size_train,
+                    path_str,backbone_epochs=args.bb_epochs,joint_epochs=args.jt_epochs,
+                    loss_f=loss_f,pretrain_backbone=True,dat_norm=normalise)
         else:
             #provide optimiser for non ee network
             lr = 0.001 #Adam algo - step size alpha=0.001

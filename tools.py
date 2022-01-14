@@ -315,7 +315,8 @@ class AccuTracker(Tracker):
 ################################
 ######   Save functions   ######
 ################################
-def save_model(model, path, file_prefix='', seed=None, epoch=None, opt=None, loss=None):
+def save_model(model, path, file_prefix='', seed=None, epoch=None, opt=None,
+        tloss=None,vloss=None,taccu=None,vaccu=None):
     #TODO add saving for inference only
     #TODO add bool to save as onnx - remember about fixed bs
     #saves the model in pytorch format to the path specified
@@ -332,8 +333,14 @@ def save_model(model, path, file_prefix='', seed=None, epoch=None, opt=None, los
         filenm += f'{epoch:03d}'
     if opt is not None:
         save_dict['opt_state_dict'] = opt.state_dict()
-    if loss is not None:
-        save_dict['loss'] = loss
+    if tloss is not None:
+        save_dict['tloss'] = tloss
+    if vloss is not None:
+        save_dict['vloss'] = vloss
+    if taccu is not None:
+        save_dict['taccu'] = taccu
+    if vaccu is not None:
+        save_dict['vaccu'] = vaccu
     if hasattr(model,'exit_loss_weights'):
         save_dict['exit_loss_weights'] = model.exit_loss_weights
 

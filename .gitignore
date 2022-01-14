@@ -2,6 +2,7 @@
 **/__pycache__/
 **/dump/
 **/outputs/
+**/outputs_old/
 **/oldenv/
 **/data_test/
 net_graph.jpg
