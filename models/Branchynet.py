@@ -209,9 +209,10 @@ class B_Lenet_se(B_Lenet):
         #adding ConvPoolAc blocks - remaining backbone
         bb_layers = []
         bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=4) )
-        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=3) )
+        #bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=3) )
         bb_layers.append(nn.Flatten())
-        bb_layers.append(nn.Linear(720, 84, bias=False))
+        bb_layers.append(nn.Linear(1000, 84)) #, bias=False))
+        #bb_layers.append(nn.Linear(720, 84, bias=False))
 
         remaining_backbone_layers = nn.Sequential(*bb_layers)
         self.backbone.append(remaining_backbone_layers)
@@ -221,12 +222,12 @@ class B_Lenet_se(B_Lenet):
         #early exit 1
         ee1 = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(1280,10, bias=False),
+            nn.Linear(1280,10,) #bias=False),
             )
         self.exits.append(ee1)
 
         #final exit
         eeF = nn.Sequential(
-            nn.Linear(84,10, bias=False),
+            nn.Linear(84,10, ) #bias=False),
         )
         self.exits.append(eeF)

@@ -10,10 +10,10 @@ Testing the onnx lib with pytorch branchynet early exit model.
 '''
 
 #importing pytorch models to test
-from models.Branchynet import B_Lenet, ConvPoolAc
+from models.Branchynet import B_Lenet, B_Lenet_fcn, B_Lenet_se, ConvPoolAc
 from models.Lenet import Lenet
-from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit
-from main import pull_mnist_data, train_backbone
+from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, BrnFirstExit_se, BrnSecondExit_se
+#from main import pull_mnist_data, train_backbone
 
 import torch
 import torch.nn as nn
@@ -90,7 +90,8 @@ def brn_main(md_pth, save_name):
     shape = [1,28,28]
     #set up model
     #model = B_Lenet(fast_inf_batch_size=bs, exit_threshold=0.1)
-    model = B_Lenet(exit_threshold=0.9)
+    #model = B_Lenet(exit_threshold=0.9)
+    model = B_Lenet_se(exit_threshold=0.9)
 
     checkpoint = torch.load(md_pth)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -221,7 +222,8 @@ def lenet_main(save_name, train):
 
     # other networks for testing
     #model = BrnFirstExit()
-    model = BrnSecondExit()
+    #model = BrnSecondExit()
+    model = BrnSecondExit_se()
 
     if train:
         #briefly train/load the model
