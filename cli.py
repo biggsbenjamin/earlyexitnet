@@ -21,6 +21,8 @@ def main():
                         'brnfirst',
                         'brnfirst_se',
                         'brnsecond',
+                        'backbone_se',
+                        'b_lenet_cifar',
                         ],
             required=True, help='select the model name')
 
@@ -38,11 +40,18 @@ def main():
     parser.add_argument('--seed', metavar='N', type=int, default=random.randint(0,2**32-1),
         help='Seed for training, NOT CURRENTLY USED')
 
+    parser.add_argument('-d','--dataset',
+            choices=['mnist','cifar10','cifar100'],
+            required=False, default='mnist',
+            help='select the dataset, default is mnist')
+    #threshold inputs for testing
+    parser.add_argument('-t1','--top1_threshold',type=float,required=False)
+    parser.add_argument('-entr','--entr_threshold',type=float,required=False)
+
     #TODO arguments to add
         #batch size training
         #batch size testing
         #training loss function
-        #specify dataset - somewhat dependent on network chosen
         #some kind of testing specification
 
     # parse the arguments

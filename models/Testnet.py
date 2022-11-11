@@ -66,7 +66,7 @@ class BrnFirstExit_se(nn.Module):
         y = [self.first_exit(x)] #NOTE put in list to reuse training code
         return y
 
-class BrnSecondExit_se(nn.Module):
+class Backbone_se(nn.Module):
     # backbone from start to end
     #se version 2nd exit
     def __init__(self):
@@ -78,9 +78,14 @@ class BrnSecondExit_se(nn.Module):
             nn.Conv2d(5, 10, kernel_size=5,stride=1,padding=4),#,bias=False),
             nn.MaxPool2d(2,stride=2,ceil_mode=False),
             nn.ReLU(),
+            #NOTE swapped a conv for a linear (more hw friendly)
+            nn.Conv2d(10, 20, kernel_size=5,stride=1,padding=3),#,bias=False),
+            nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            nn.ReLU(),
+            #NOTE
             nn.Flatten(),
-            nn.Linear(1000, 84), #bias=False
-            nn.Linear(84, 10)
+            #nn.Linear(1000, 84), #bias=False
+            nn.Linear(720, 10)
         )
 
     def forward(self, x):
@@ -116,4 +121,32 @@ class Testnet(nn.Module):
         #y = self.relu4(y)
         #y = self.fc3(y)
         #y = self.relu5(y)
+        return y
+
+############## ALEXNET BB ################
+#FIXME
+class Backbone_se(nn.Module):
+    # backbone from start to end
+    #se version 2nd exit
+    def __init__(self):
+        super().__init__()
+        self.second_exit = nn.Sequential(
+            nn.Conv2d(1, 5, kernel_size=5,stride=1,padding=4),
+            nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            nn.ReLU(),
+            nn.Conv2d(5, 10, kernel_size=5,stride=1,padding=4),#,bias=False),
+            nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            nn.ReLU(),
+            #NOTE swapped a conv for a linear (more hw friendly)
+            nn.Conv2d(10, 20, kernel_size=5,stride=1,padding=3),#,bias=False),
+            nn.MaxPool2d(2,stride=2,ceil_mode=False),
+            nn.ReLU(),
+            #NOTE
+            nn.Flatten(),
+            #nn.Linear(1000, 84), #bias=False
+            nn.Linear(720, 10)
+        )
+
+    def forward(self, x):
+        y = [self.second_exit(x)] #NOTE put in list to reuse training code
         return y

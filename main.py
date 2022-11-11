@@ -1,12 +1,12 @@
 #training, testing for branchynet-pytorch version
 
-from models.Branchynet import ConvPoolAc,B_Lenet,B_Lenet_fcn,B_Lenet_se
+from models.Branchynet import ConvPoolAc,B_Lenet,B_Lenet_fcn,B_Lenet_se, B_Lenet_cifar
 from models.Lenet import Lenet
-from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, BrnFirstExit_se
+from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, Backbone_se
 
 from tools import MNISTDataColl, CIFAR10DataColl, CIFAR100DataColl
 from tools import Tracker, LossTracker, AccuTracker
-from tools import save_model, load_model
+from tools import save_model, load_model, shape_test
 
 import torch
 import torch.nn as nn
@@ -239,18 +239,21 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
     return best_val_accu[1],savepoint
 
 class Tester:
-    def __init__(self,model,test_dl,loss_f=nn.CrossEntropyLoss(),exits=2):
+    def __init__(self,model,test_dl,loss_f=nn.CrossEntropyLoss(),exits=2,
+            top1acc_thresholds=[],entropy_thresholds=[]):
         self.model=model
         self.test_dl=test_dl
         self.loss_f=loss_f
         self.exits=exits
         self.sample_total = len(test_dl)
+        self.top1acc_thresholds = top1acc_thresholds
+        self.entropy_thresholds = entropy_thresholds
         if exits > 1:
-            #TODO make thresholds a param
+            #TODO make thresholds a more flexible param
             #setting top1acc threshold for exiting (final exit set to 0)
-            self.top1acc_thresholds = [0.995,0]
+            #self.top1acc_thresholds = [0.995,0]
             #setting entropy threshold for exiting (final exit set to LARGE)
-            self.entropy_thresholds = [0.025,1000000]
+            #self.entropy_thresholds = [0.025,1000000]
             #set up stat trackers
             #samples exited
             self.exit_track_top1 = Tracker(test_dl.batch_size,exits,self.sample_total)
@@ -314,7 +317,7 @@ class Tester:
                     #print("exit CE loss: {}".format(loss_f(exit,yb)))
 
     def test(self):
-        print(f"Test of  length {self.sample_total} starting")
+        print(f"Test of length {self.sample_total} starting")
         if self.exits > 1:
             self._test_multi_exit()
             self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
@@ -345,6 +348,8 @@ def train_n_test(args):
         model = BrnSecondExit()
     elif args.model_name == 'brnfirst_se': #se version
         model = BrnFirstExit_se()
+    elif args.model_name == 'backbone_se': #se backbone (for baseline)
+        model = Backbone_se()
     elif args.model_name == 'b_lenet':
         model = B_Lenet()
         exits = 2
@@ -354,8 +359,12 @@ def train_n_test(args):
     elif args.model_name == 'b_lenet_se':
         model = B_Lenet_se()
         exits = 2
+    elif args.model_name == 'b_lenet_cifar':
+        model = B_Lenet_cifar()
+        exits = 2
+        print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
     else:
-        raise NameError("Model not supported")
+        raise NameError("Model not supported, check name:",args.model_name)
     print("Model done:", args.model_name)
 
     #set loss function - og bn used "softmax_cross_entropy" unclear if this is the same
@@ -364,11 +373,18 @@ def train_n_test(args):
     batch_size_test = 1 #test bs in branchynet
     normalise=False     #normalise the training data or not
 
+
+
     if args.trained_model_path is not None:
         #load in the model from the path
         load_model(model, args.trained_model_path)
         #skip to testing
-        datacoll = MNISTDataColl(batch_size_test=batch_size_test)
+        if args.dataset == 'mnist':
+            datacoll = MNISTDataColl(batch_size_test=batch_size_test)
+        elif args.dataset == 'cifar10':
+            datacoll = CIFAR10DataColl(batch_size_test=batch_size_test)
+        else:
+            raise NameError("Dataset not supported, check name:",args.dataset)
         #TODO make use of profiling split
         notes_path = os.path.join(os.path.split(args.trained_model_path)[0],'notes.txt')
         save_path = args.trained_model_path
@@ -378,8 +394,16 @@ def train_n_test(args):
         batch_size_train = 500 #training bs in branchynet
         validation_split = 0.2
         #sort into training, and test data
-        datacoll = MNISTDataColl(batch_size_train=batch_size_train,
-                batch_size_test=batch_size_test,normalise=normalise,v_split=validation_split)
+        if args.dataset == 'mnist':
+            datacoll = MNISTDataColl(batch_size_train=batch_size_train,
+                    batch_size_test=batch_size_test,normalise=normalise,
+                    v_split=validation_split)
+        elif args.dataset == 'cifar10':
+            datacoll = CIFAR10DataColl(batch_size_train=batch_size_train,
+                    batch_size_test=batch_size_test,normalise=normalise,
+                    v_split=validation_split)
+        else:
+            raise NameError("Dataset not supported, check name:",args.dataset)
         train_dl = datacoll.get_train_dl()
         valid_dl = datacoll.get_valid_dl()
         print("Got training data, batch size:",batch_size_train)
@@ -399,7 +423,9 @@ def train_n_test(args):
             exp_decay_rates = [0.99, 0.999]
             opt = optim.Adam(model.parameters(), betas=exp_decay_rates, lr=lr)
 
-            path_str = f'outputs/bb_only/'
+            ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
+            path_str = f'outputs/bb_only/time_{ts}'
+            print("Saving to:",path_str)
             save_path,last_path = train_backbone(model, train_dl, valid_dl,
                     batch_size=batch_size_train, save_path=path_str, epochs=args.bb_epochs,
                     loss_f=loss_f, opt=opt, dat_norm=normalise)
@@ -411,7 +437,7 @@ def train_n_test(args):
             notes.write("Training batch size {}, Test batchsize {}\n".format(batch_size_train,
                                                                            batch_size_test))
             if hasattr(model,'exit_loss_weights'):
-                notes.write("model training exit weights:"+str(model.exit_loss_weights))
+                notes.write("model training exit weights:"+str(model.exit_loss_weights)+"\n")
             notes.write("Path to last model:"+str(last_path)+"\n")
         notes.close()
 
@@ -420,7 +446,15 @@ def train_n_test(args):
 
     test_dl = datacoll.get_test_dl()
     #once trained, run it on the test data
-    net_test = Tester(model,test_dl,loss_f,exits)
+    if exits>1:
+        top1_thr = [args.top1_threshold, 0]
+        entr_thr = [args.entr_threshold, 1000000]
+        net_test = Tester(model,test_dl,loss_f,exits,
+                top1_thr,entr_thr)
+    else:
+        net_test = Tester(model,test_dl,loss_f,exits)
+    top1_thr = net_test.top1acc_thresholds
+    entr_thr = net_test.entropy_thresholds
     net_test.test()
     #get test results
     test_size = net_test.sample_total
@@ -432,6 +466,7 @@ def train_n_test(args):
     ent_tot_acc = net_test.entr_accu_tot
     full_exit_accu = net_test.full_exit_accu
     #get percentage exits and avg accuracies, add some timing etc.
+    print("top1 thrs: {},  entropy thrs: {}".format(top1_thr, entr_thr))
     print("top1 exit %s {},  entropy exit %s {}".format(top1_pc, entropy_pc))
     print("Accuracy over exited samples:")
     print("top1 exit acc % {}, entropy exit acc % {}".format(top1acc, entracc))
@@ -440,10 +475,13 @@ def train_n_test(args):
     print("Accuracy of the individual exits over full set: {}".format(full_exit_accu))
 
     with open(notes_path, 'a') as notes:
+        notes.write("\n#######################################\n")
         notes.write(f"\nTesting results: for {args.model_name}\n")
+        notes.write(f"on dataset {args.dataset}\n")
         notes.write("Test sample size: {}\n".format(test_size))
+        notes.write("top1 thrs: {},  entropy thrs: {}\n".format(top1_thr, entr_thr))
         notes.write("top1 exit %s {}, entropy exit %s {}\n".format(top1_pc, entropy_pc))
-        notes.write("best* model "+save_path)
+        notes.write("best* model "+save_path+"\n")
         notes.write("Accuracy over exited samples:\n")
         notes.write("top1 exit acc % {}, entropy exit acc % {}\n".format(top1acc, entracc))
         notes.write("Accuracy over EE network:\n")
@@ -451,7 +489,7 @@ def train_n_test(args):
         notes.write("Accuracy of the individual exits over full set: {}\n".format(full_exit_accu))
 
         if args.run_notes is not None:
-            notes.write(args.run_notes)
+            notes.write(args.run_notes+"\n")
     notes.close()
 
     #be nice to have comparison against pytorch pretrained LeNet from pytorch

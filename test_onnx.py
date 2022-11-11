@@ -12,7 +12,7 @@ Testing the onnx lib with pytorch branchynet early exit model.
 #importing pytorch models to test
 from models.Branchynet import B_Lenet, B_Lenet_fcn, B_Lenet_se, ConvPoolAc
 from models.Lenet import Lenet
-from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, BrnFirstExit_se, BrnSecondExit_se
+from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, BrnFirstExit_se, Backbone_se
 #from main import pull_mnist_data, train_backbone
 
 import torch
@@ -86,12 +86,15 @@ def to_onnx(model, input_size, batch_size=1,
 def brn_main(md_pth, save_name):
 
     print("Running BranchyNet Test")
+    e_thr = 0.996
     bs = 1
     shape = [1,28,28]
     #set up model
     #model = B_Lenet(fast_inf_batch_size=bs, exit_threshold=0.1)
     #model = B_Lenet(exit_threshold=0.9)
-    model = B_Lenet_se(exit_threshold=0.9)
+    #model = B_Lenet_se(exit_threshold=0.996)
+    model = B_Lenet_se(exit_threshold=e_thr)
+    print(f"Using model b lenet se, thr={e_thr}")
 
     checkpoint = torch.load(md_pth)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -110,6 +113,7 @@ def brn_main(md_pth, save_name):
     tfs = transforms.Compose([
         transforms.ToTensor()
         ])
+
     mnist_dl = DataLoader( torchvision.datasets.MNIST('../data/mnist',
                                     download=True, train=False, transform=tfs),
                 batch_size=1, drop_last=True, shuffle=False)
@@ -154,7 +158,59 @@ def brn_main(md_pth, save_name):
     output3 = model(ie_ten) #model(xie)
     print("PT OUT3:", output3)
 
-    print(torch.max(ie_ten), torch.max(xb))
+    ###         #print(torch.max(ie_ten), torch.max(xb))
+    ###         def load_inputs(self,filepath):
+    ###         img_ls = os.listdir(filepath)
+    ###         img_ls.sort()
+    ###
+    ###         np_ls=[]
+    ###         for s in range(self.partition.batch_size):
+    ###         current_path = os.path.join(filepath,img_ls[s])
+    ###         # load in the numpy array
+    ###         #img = np.array(Image.open(current_path),dtype=np.float32)
+    ###         img = np.load(current_path)
+    ###         # scale images
+    ###         data_max = np.amax(img)
+    ###         img = img / data_max
+    ###         if len(img.shape) == 2:
+    ###         img = np.expand_dims(img,axis=0)
+    ###         np_ls.append(img)
+    ###         self.data = np.concatenate(np_ls, axis=0 )
+    ###         print("Input data shape:",self.data.shape)
+
+    ### TESTING THE IMAGES USED FOR BOARD ###
+    npy_path = "../fpgaconvnet-hls/test/partitions/ee_80rsc/IMAGES/"
+    #get the files, order them, pick the first 64
+    bs = 64
+    img_ls = os.listdir(npy_path)
+    img_ls.sort()
+
+    output4 = []
+    np_ls = []
+    for samp_idx in range(bs):
+
+        current_path = os.path.join(npy_path,img_ls[samp_idx])
+        img = np.load(current_path)
+        print(f"image {samp_idx} loaded from : {current_path}")
+        data_max = np.amax(img)
+        img = img / data_max
+        if len(img.shape) == 2:
+            img = np.expand_dims(img,axis=0)
+        np_ls.append(img)
+
+        # convert from np to pyt
+        test_img = torch.from_numpy(img)
+
+        #print(f"Running img")
+        tmp = model(test_img)
+        output4.append(tmp)
+        #print(f"Network run")
+
+    #print("PT OUT4:", output4)
+    ### TESTING THE IMAGES USED FOR BOARD ###
+
+    #FIXME remove when done playing with test sets
+    return
 
 
     #save to onnx
@@ -163,7 +219,8 @@ def brn_main(md_pth, save_name):
     print("SAVED TO: ",save_path)
 
     #load from onnx
-    print("IMPORTING MODEL FROM ONNX")
+    print("IMPORTING MODEL FROM ONNX for comparison")
+
     #onnx_model = onnx.load(save_path)
     #onnx.checker.check_model(onnx_model) #running model checker
     #TODO add more onnx checks
@@ -211,7 +268,7 @@ def brn_main(md_pth, save_name):
 #######                                                      #######
 ####################################################################
 
-def lenet_main(save_name, train):
+def lenet_main(args, save_name, train):
     print("Running LeNet/TestNet Test")
     bs = 1#64
     #shape = [5,16,16]
@@ -223,7 +280,7 @@ def lenet_main(save_name, train):
     # other networks for testing
     #model = BrnFirstExit()
     #model = BrnSecondExit()
-    model = BrnSecondExit_se()
+    model = Backbone_se()
 
     if train:
         #briefly train/load the model
@@ -237,6 +294,11 @@ def lenet_main(save_name, train):
         save_path = train_backbone(model, train_dl, valid_dl,
                 batch_size=batch_size, save_path=path_str, epochs=20,
                 loss_f=nn.CrossEntropyLoss(), opt=opt, dat_norm=True)
+
+    else:
+        md_pth = args.trained_path
+        checkpoint = torch.load(md_pth)
+        model.load_state_dict(checkpoint['model_state_dict'])
 
     model.eval()
     print("Model done")
@@ -378,7 +440,7 @@ def main():
         brn_main(md_pth=args.trained_path, save_name=args.save_name)
     elif args.model == 'lenet':
         print("ignorning model path provided")
-        lenet_main(save_name=args.save_name, train=args.train)
+        lenet_main(args, save_name=args.save_name, train=args.train)
 
 if __name__ == "__main__":
     main()

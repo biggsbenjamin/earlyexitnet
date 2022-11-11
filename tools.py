@@ -65,6 +65,7 @@ class DataColl:
     def gen_train(self): #gen training sets, normalised or valid split defined here
         if self.normalise_train:
             print("WARNING: Normalising data set")
+            raise NameError("no normalising till fixed")
             #calc mean and stdev
             norm_dl = DataLoader(self.full_train_set, batch_size=len(self.full_train_set))
             norm_data = next(iter(norm_dl))

@@ -116,9 +116,16 @@ class B_Lenet(nn.Module):
         #evaluate the exit criterion on the result provided
         #return true if it can exit, false if it can't
         with torch.no_grad():
-            pk = nn.functional.softmax(x, dim=-1)
-            top1 = torch.max(pk) #x)
-            return top1 > self.exit_threshold
+            exp_arr = torch.exp(x)
+
+            emax = torch.max(exp_arr)
+
+            esum = torch.sum(exp_arr)
+
+            #pk = nn.functional.softmax(x, dim=-1)
+            #top1 = torch.max(pk) #x)
+            #return top1 > self.exit_threshold
+            return emax > esum*self.exit_threshold
 
     @torch.jit.unused #decorator to skip jit comp
     def _forward_training(self, x):
@@ -140,6 +147,7 @@ class B_Lenet(nn.Module):
                 if self.exit_criterion_top1(res):
                     #print("EE fired")
                     return res
+            print("### LATE EXIT ###")
             return res
 
             #works for predefined batchsize - pytorch only for same reason of batching
@@ -178,7 +186,7 @@ class B_Lenet_fcn(B_Lenet):
         bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=4) )
         bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=3) )
         bb_layers.append(nn.Flatten())
-        bb_layers.append(nn.Linear(720, 84, bias=False))
+        bb_layers.append(nn.Linear(720, 84))#, bias=False))
 
         remaining_backbone_layers = nn.Sequential(*bb_layers)
         self.backbone.append(remaining_backbone_layers)
@@ -189,13 +197,13 @@ class B_Lenet_fcn(B_Lenet):
         ee1 = nn.Sequential(
             ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
             nn.Flatten(),
-            nn.Linear(640,10, bias=False),
+            nn.Linear(640,10), #, bias=False),
             )
         self.exits.append(ee1)
 
         #final exit
         eeF = nn.Sequential(
-            nn.Linear(84,10, bias=False),
+            nn.Linear(84,10),#, bias=False),
         )
         self.exits.append(eeF)
 
@@ -209,10 +217,10 @@ class B_Lenet_se(B_Lenet):
         #adding ConvPoolAc blocks - remaining backbone
         bb_layers = []
         bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=4) )
-        #bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=3) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=3) )
         bb_layers.append(nn.Flatten())
-        bb_layers.append(nn.Linear(1000, 84)) #, bias=False))
-        #bb_layers.append(nn.Linear(720, 84, bias=False))
+        #NOTE original: bb_layers.append(nn.Linear(720, 84, bias=False))
+        #se original: bb_layers.append(nn.Linear(1000, 84)) #, bias=False))
 
         remaining_backbone_layers = nn.Sequential(*bb_layers)
         self.backbone.append(remaining_backbone_layers)
@@ -221,13 +229,40 @@ class B_Lenet_se(B_Lenet):
     def _build_exits(self):
         #early exit 1
         ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
             nn.Flatten(),
-            nn.Linear(1280,10,) #bias=False),
+            nn.Linear(640,10), #, bias=False),
+            # NOTE original se lenet but different enough so might work??
+            # NOTE brn_se_SMOL.onnx is different to both of these... backbones are the same tho
+            #nn.Flatten(),
+            #nn.Linear(1280,10,) #bias=False),
             )
         self.exits.append(ee1)
 
         #final exit
         eeF = nn.Sequential(
-            nn.Linear(84,10, ) #bias=False),
+            #NOTE original nn.Linear(84,10, ) #bias=False),
+            nn.Linear(720,10)
         )
         self.exits.append(eeF)
+
+#cifar10 version - harder data set
+class B_Lenet_cifar(B_Lenet_fcn):
+    def _build_backbone(self):
+        #NOTE changed padding from 4 to 2
+        # changed input number of channels to be 3
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=2)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=4) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=3) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 84))#, bias=False))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+#class B_Alexnet_cifar(B_Lenet):
+    # attempt 2 exit alexnet
