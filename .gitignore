@@ -8,3 +8,5 @@
 net_graph.jpg
 net_graph.jpg.pdf
 *.pyc
+**/old/**
+*.npy

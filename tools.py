@@ -391,3 +391,4 @@ def shape_test(model, dims_in, dims_out, loss_function=nn.CrossEntropyLoss()):
         else:
             losses = [loss_function(results, rand_out)]
     return losses
+

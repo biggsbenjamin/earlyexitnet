@@ -12,7 +12,22 @@ class ConvPoolAc(nn.Module):
             nn.Conv2d(chanIn, chanOut, kernel_size=kernel,
                 stride=stride, padding=padding, bias=bias),
             nn.MaxPool2d(2, stride=2, ceil_mode=p_ceil_mode), #ksize, stride
-            nn.ReLU(True)
+            nn.ReLU(True),
+        )
+
+    def forward(self, x):
+        return self.layer(x)
+
+# alexnet version
+class ConvAcPool(nn.Module):
+    def __init__(self, chanIn, chanOut, kernel=3, stride=1, padding=1, p_ceil_mode=False,bias=True):
+        super(ConvAcPool, self).__init__()
+
+        self.layer = nn.Sequential(
+            nn.Conv2d(chanIn, chanOut, kernel_size=kernel,
+                stride=stride, padding=padding, bias=bias),
+            nn.ReLU(True),
+            nn.MaxPool2d(3, stride=2, ceil_mode=p_ceil_mode), #ksize, stride
         )
 
     def forward(self, x):
@@ -65,6 +80,7 @@ class B_Lenet(nn.Module):
         #weight initialisiation - for standard layers this is done automagically
         self._build_backbone()
         self._build_exits()
+        self.le_cnt=0
 
     def _build_backbone(self):
         #Starting conv2d layer
@@ -116,16 +132,14 @@ class B_Lenet(nn.Module):
         #evaluate the exit criterion on the result provided
         #return true if it can exit, false if it can't
         with torch.no_grad():
-            exp_arr = torch.exp(x)
+            #exp_arr = torch.exp(x)
+            #emax = torch.max(exp_arr)
+            #esum = torch.sum(exp_arr)
+            #return emax > esum*self.exit_threshold
 
-            emax = torch.max(exp_arr)
-
-            esum = torch.sum(exp_arr)
-
-            #pk = nn.functional.softmax(x, dim=-1)
-            #top1 = torch.max(pk) #x)
-            #return top1 > self.exit_threshold
-            return emax > esum*self.exit_threshold
+            pk = nn.functional.softmax(x, dim=-1)
+            top1 = torch.max(pk) #x)
+            return top1 > self.exit_threshold
 
     @torch.jit.unused #decorator to skip jit comp
     def _forward_training(self, x):
@@ -147,7 +161,8 @@ class B_Lenet(nn.Module):
                 if self.exit_criterion_top1(res):
                     #print("EE fired")
                     return res
-            print("### LATE EXIT ###")
+            #print("### LATE EXIT ###")
+            #self.le_cnt+=1
             return res
 
             #works for predefined batchsize - pytorch only for same reason of batching
@@ -264,5 +279,201 @@ class B_Lenet_cifar(B_Lenet_fcn):
         remaining_backbone_layers = nn.Sequential(*bb_layers)
         self.backbone.append(remaining_backbone_layers)
 
-#class B_Alexnet_cifar(B_Lenet):
-    # attempt 2 exit alexnet
+class B_Alexnet_cifar(B_Lenet):
+    # attempt 1 exit alexnet
+    def __init__(self, exit_threshold=0.5):
+        super(B_Lenet, self).__init__()
+
+        self.fast_inference_mode = False
+        self.exit_threshold = torch.tensor([exit_threshold], dtype=torch.float32)
+        self.backbone = nn.ModuleList()
+        self.exits = nn.ModuleList()
+        self.exit_loss_weights = [1.0, 0.3] #weighting for each exit when summing loss
+        #weight initialisiation - for standard layers this is done automagically
+        self._build_backbone()
+        self._build_exits()
+        self.le_cnt=0
+
+    def _build_backbone(self):
+        strt_bl = nn.Sequential(
+                ConvAcPool(3, 32, kernel=5, stride=1, padding=2),
+                )
+        self.backbone.append(strt_bl)
+
+        bb_layers = []
+        bb_layers.append(ConvAcPool(32, 64, kernel=5, stride=1, padding=2))
+        bb_layers.append(nn.Conv2d(64, 96, kernel_size=3,stride=1,padding=1) )
+        bb_layers.append(nn.ReLU())
+        #branch 2 - ignoring
+        #conv4
+        bb_layers.append(nn.Conv2d(96, 96, kernel_size=3,stride=1,padding=1))
+        bb_layers.append(nn.ReLU())
+        bb_layers.append(nn.Conv2d(96, 64, kernel_size=3,stride=1,padding=1))
+        bb_layers.append(nn.ReLU())
+        bb_layers.append(nn.MaxPool2d(3,stride=2,ceil_mode=False))
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(576, 256))
+        bb_layers.append(nn.ReLU())
+        #dropout
+        bb_layers.append(nn.Linear(256, 128))
+        bb_layers.append(nn.ReLU())
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            nn.Conv2d(32, 64, kernel_size=3,stride=1,padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(3,stride=2,ceil_mode=False),
+            nn.Conv2d(64, 32, kernel_size=3,stride=1,padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(3,stride=2,ceil_mode=False),
+            nn.Flatten(),
+            nn.Linear(288,10), #, bias=False),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(128,10)
+        )
+        self.exits.append(eeF)
+
+class TW_SmallCNN(B_Lenet):
+    # TODO make own class for TW
+    # attempt 1 exit from triple wins
+    def __init__(self, exit_threshold=0.5):
+        super(B_Lenet, self).__init__()
+
+        # copied from b-alexnet
+        self.fast_inference_mode = False
+        self.exit_threshold = torch.tensor([exit_threshold], dtype=torch.float32)
+        self.backbone = nn.ModuleList()
+        self.exits = nn.ModuleList()
+        self.exit_loss_weights = [1.0, 0.3] #weighting for each exit when summing loss
+        #weight initialisiation - for standard layers this is done automagically
+        self._build_backbone()
+        self._build_exits()
+        self.le_cnt=0
+
+    def _build_backbone(self):
+        strt_bl = nn.Sequential(
+                nn.Conv2d(1, 32, 3),
+                nn.ReLU(True),
+                )
+        self.backbone.append(strt_bl)
+
+        bb_layers = []
+        bb_layers.append(nn.Conv2d(32,32,3),)
+        bb_layers.append(nn.ReLU(True),)
+        bb_layers.append(nn.MaxPool2d(2,2),)
+        bb_layers.append(nn.Conv2d(32,64,3),)
+        bb_layers.append(nn.ReLU(True),)
+        #branch2 - ignoring
+        bb_layers.append(nn.Conv2d(64,64,3),)
+        bb_layers.append(nn.ReLU(True),)
+        bb_layers.append(nn.MaxPool2d(2,2),)
+        bb_layers.append(nn.Flatten(),)
+        bb_layers.append(nn.Linear(64*4*4, 200),)
+        bb_layers.append(nn.ReLU(True),)
+        # drop
+        bb_layers.append(nn.Linear(200,200),)
+        bb_layers.append(nn.ReLU(True),)
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            nn.Conv2d(32, 16, 3, stride=2),
+            nn.MaxPool2d(2, 2),
+            nn.Flatten(),
+            nn.Linear(16 * 6 * 6, 200),
+            #nn.Dropout(drop),
+            nn.Linear(200, 200),
+            nn.Linear(200, 10)
+                )
+        self.exits.append(ee1)
+
+        ##early exit 2
+        #ee2 = nn.Sequential(
+        #    nn.MaxPool2d(2, 2),
+        #    View(-1, 64 * 5 * 5),
+        #    nn.Linear(64 * 5 * 5, 200),
+        #    nn.Dropout(drop),
+        #    nn.Linear(200, 200),
+        #    nn.Linear(200, self.num_labels)
+        #    )
+        #self.exits.append(ee2)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(200,10)
+        )
+        self.exits.append(eeF)
+
+
+class C_Alexnet_SVHN(B_Lenet):
+    # attempt 1 exit alexnet
+    def __init__(self, exit_threshold=0.5):
+        super(B_Lenet, self).__init__()
+
+        self.fast_inference_mode = False
+        self.exit_threshold = torch.tensor([exit_threshold], dtype=torch.float32)
+        self.backbone = nn.ModuleList()
+        self.exits = nn.ModuleList()
+        self.exit_loss_weights = [1.0, 0.3] #weighting for each exit when summing loss
+        #weight initialisiation - for standard layers this is done automagically
+        self._build_backbone()
+        self._build_exits()
+        self.le_cnt=0
+
+    def _build_backbone(self):
+        strt_bl = nn.Sequential(
+                ConvAcPool(3, 64, kernel=3, stride=1, padding=2),
+                ConvAcPool(64, 192, kernel=3, stride=1, padding=2),
+                nn.Conv2d(192, 384, kernel_size=3,stride=1,padding=1),
+                nn.ReLU()
+                )
+        self.backbone.append(strt_bl)
+
+        bb_layers = []
+        bb_layers.append(nn.Conv2d(384, 256, kernel_size=3,stride=1,padding=1))
+        bb_layers.append(nn.ReLU())
+        bb_layers.append(nn.Conv2d(256, 256, kernel_size=3,stride=1,padding=1))
+        bb_layers.append(nn.ReLU())
+        bb_layers.append(nn.MaxPool2d(3,stride=2,ceil_mode=False))
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(2304, 2048))
+        bb_layers.append(nn.ReLU())
+        #dropout
+        bb_layers.append(nn.Linear(2048, 2048))
+        bb_layers.append(nn.ReLU())
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            nn.Conv2d(384, 128, kernel_size=3,stride=1,padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(3,stride=2,ceil_mode=False),
+            nn.Flatten(),
+            nn.Linear(1152,10), #, bias=False),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(2048,10)
+        )
+        self.exits.append(eeF)

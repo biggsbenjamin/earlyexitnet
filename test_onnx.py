@@ -10,9 +10,9 @@ Testing the onnx lib with pytorch branchynet early exit model.
 '''
 
 #importing pytorch models to test
-from models.Branchynet import B_Lenet, B_Lenet_fcn, B_Lenet_se, ConvPoolAc
+from models.Branchynet import B_Lenet, B_Lenet_fcn, B_Lenet_se, ConvPoolAc, B_Alexnet_cifar, TW_SmallCNN, C_Alexnet_SVHN
 from models.Lenet import Lenet
-from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, BrnFirstExit_se, Backbone_se
+from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, BrnFirstExit_se, Backbone_se, Backbone_Alex, TW_BB_SmallCNN, SDN_BB_ResNet
 #from main import pull_mnist_data, train_backbone
 
 import torch
@@ -150,13 +150,13 @@ def brn_main(md_pth, save_name):
     combi = torch.cat((test_x, test_x, xb), 0) #NOTE currently not used, combines into batch
     #print(combi)
 
-    print("STARTING RUN OF PYTORCH MODEL WITH INPUTS")
-    output = model(xb)
-    print("PT OUT:", output)
-    output2 = model(test_x)
-    print("PT OUT2:", output2)
-    output3 = model(ie_ten) #model(xie)
-    print("PT OUT3:", output3)
+    #print("STARTING RUN OF PYTORCH MODEL WITH INPUTS")
+    #output = model(xb)
+    #print("PT OUT:", output)
+    #output2 = model(test_x)
+    #print("PT OUT2:", output2)
+    #output3 = model(ie_ten) #model(xie)
+    #print("PT OUT3:", output3)
 
     ###         #print(torch.max(ie_ten), torch.max(xb))
     ###         def load_inputs(self,filepath):
@@ -179,15 +179,18 @@ def brn_main(md_pth, save_name):
     ###         print("Input data shape:",self.data.shape)
 
     ### TESTING THE IMAGES USED FOR BOARD ###
-    npy_path = "../fpgaconvnet-hls/test/partitions/ee_80rsc/IMAGES/"
-    #get the files, order them, pick the first 64
-    bs = 64
+    #npy_path = "../fpgaconvnet-hls/test/partitions/ee_80rsc/IMAGES/"
+    #bs=64
+    npy_path = "./IMAGES_1024e/"
+    bs = 1024
+
     img_ls = os.listdir(npy_path)
     img_ls.sort()
 
     output4 = []
     np_ls = []
-    for samp_idx in range(bs):
+    offset = 0
+    for samp_idx in range(offset, bs+offset):
 
         current_path = os.path.join(npy_path,img_ls[samp_idx])
         img = np.load(current_path)
@@ -208,6 +211,10 @@ def brn_main(md_pth, save_name):
 
     #print("PT OUT4:", output4)
     ### TESTING THE IMAGES USED FOR BOARD ###
+
+    print("LE Count:", model.le_cnt)
+
+    print("Returning without saving anything.")
 
     #FIXME remove when done playing with test sets
     return
@@ -261,6 +268,66 @@ def brn_main(md_pth, save_name):
         ort_outs[0], rtol=1e-03, atol=1e-05)
     np.testing.assert_allclose(to_numpy(output2),
         ort_outs2[0], rtol=1e-03, atol=1e-05)
+
+def balexnet(md_pth, save_name):
+    print("Running BranchyAlexNet Test")
+    e_thr = 0.6
+    bs = 1
+    shape = [3,32,32]
+    model = B_Alexnet_cifar(exit_threshold=e_thr)
+    print(f"Using model b alexnet cifar, thr={e_thr}")
+
+    test_x = torch.ones(1, *shape)
+    if save_name[-5:] != '.onnx':
+        save_name += '.onnx'
+
+    model.set_fast_inf_mode()
+    print("Finished loading model parameters")
+
+    #save to onnx
+    print("SAVING MODEL TO ONNX: ", save_name)
+    save_path = to_onnx(model, shape, batch_size=bs, fname=save_name, test_in=test_x)
+    print("SAVED TO: ",save_path)
+
+def tw_smallcnn(md_pth, save_name):
+    print("Running Triplewins small cnn Test")
+    e_thr = 0.6
+    bs = 1
+    shape = [1,28,28]
+    model = TW_SmallCNN(exit_threshold=e_thr)
+    print(f"Using model triplewins small cnn, thr={e_thr}")
+
+    test_x = torch.ones(1, *shape)
+    if save_name[-5:] != '.onnx':
+        save_name += '.onnx'
+
+    model.set_fast_inf_mode()
+    print("Finished loading model parameters")
+
+    #save to onnx
+    print("SAVING MODEL TO ONNX: ", save_name)
+    save_path = to_onnx(model, shape, batch_size=bs, fname=save_name, test_in=test_x)
+    print("SAVED TO: ",save_path)
+
+def calexsvhn(md_pth, save_name):
+    print("Running C AlexNet Test")
+    e_thr = 0.6
+    bs = 1
+    shape = [3,32,32]
+    model = C_Alexnet_SVHN(exit_threshold=e_thr)
+    print(f"Using model c alexnet svhn, thr={e_thr}")
+
+    test_x = torch.ones(1, *shape)
+    if save_name[-5:] != '.onnx':
+        save_name += '.onnx'
+
+    model.set_fast_inf_mode()
+    print("Finished loading model parameters")
+
+    #save to onnx
+    print("SAVING MODEL TO ONNX: ", save_name)
+    save_path = to_onnx(model, shape, batch_size=bs, fname=save_name, test_in=test_x)
+    print("SAVED TO: ",save_path)
 
 ####################################################################
 #######                                                      #######
@@ -417,6 +484,110 @@ def lenet_main(args, save_name, train):
     np.testing.assert_allclose(to_numpy(output2),
         ort_outs2[0], rtol=1e-03, atol=1e-05)
 
+def alexnet(args, save_name, train):
+    print("Running LeNet/TestNet Test")
+    bs = 1#64
+    shape = [3,32,32]
+
+    model = Backbone_Alex()
+    model.eval()
+    print("Model done")
+
+    path='outputs/onnx'
+    if save_name[-5:] != '.onnx':
+        save_name += '.onnx'
+    sv_pnt = os.path.join(path, save_name)
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    x = torch.randn(bs, *shape)
+
+    torch.onnx.export(
+        #scr_model,      # model being run
+        model,
+        x,              # model input (or a tuple for multiple inputs)
+        sv_pnt,         # where to save the model (can be a file or file-like object)
+        export_params=True, # store the trained parameter weights inside the model file
+        opset_version=13,          # the ONNX version to export the model to
+        do_constant_folding=True,  # t/f execute constant folding for optimization
+        #example_outputs=ex_out,
+        input_names = ['a_in'],   # the model's input names
+        output_names = ['a_out'],#, 'eeF'], # the model's output names
+        #dynamic_axes={'lenet_in' : {0 : 'batch_size'},    # variable length axes
+        #              'lenet_out' : {0 : 'exit_size'}
+        #              }
+    )
+    print("SAVED")
+
+# triple wins small cnn
+def triplewins(args, save_name, train):
+    print("Gen ONNX model for triple wins small cnn mnist")
+    bs = 1#64
+    shape = [1,28,28]
+
+    model = TW_BB_SmallCNN()
+    print("Model done")
+
+    path='outputs/onnx'
+    if save_name[-5:] != '.onnx':
+        save_name += '.onnx'
+    sv_pnt = os.path.join(path, save_name)
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    x = torch.randn(bs, *shape)
+
+    torch.onnx.export(
+        #scr_model,      # model being run
+        model,
+        x,              # model input (or a tuple for multiple inputs)
+        sv_pnt,         # where to save the model (can be a file or file-like object)
+        export_params=True, # store the trained parameter weights inside the model file
+        opset_version=13,          # the ONNX version to export the model to
+        do_constant_folding=True,  # t/f execute constant folding for optimization
+        #example_outputs=ex_out,
+        input_names = ['tw_in'],   # the model's input names
+        output_names = ['tw_out'],#, 'eeF'], # the model's output names
+        #dynamic_axes={'lenet_in' : {0 : 'batch_size'},    # variable length axes
+        #              'lenet_out' : {0 : 'exit_size'}
+        #              }
+    )
+    print("SAVED")
+
+# sdn/l2stop resnet backbone
+def sdn_bb(args, save_name, train):
+    print("Gen ONNX model for sdn/l2stop resnet18 BB - cifar100")
+    bs = 1#64
+    shape = [3,32,32]
+
+    model = SDN_BB_ResNet()
+    print("Model done")
+
+    path='outputs/onnx'
+    if save_name[-5:] != '.onnx':
+        save_name += '.onnx'
+    sv_pnt = os.path.join(path, save_name)
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    x = torch.randn(bs, *shape)
+
+    torch.onnx.export(
+        #scr_model,      # model being run
+        model,
+        x,              # model input (or a tuple for multiple inputs)
+        sv_pnt,         # where to save the model (can be a file or file-like object)
+        export_params=True, # store the trained parameter weights inside the model file
+        opset_version=13,          # the ONNX version to export the model to
+        do_constant_folding=True,  # t/f execute constant folding for optimization
+        #example_outputs=ex_out,
+        input_names = ['sdn_in'],   # the model's input names
+        output_names = ['sdn_out'],#, 'eeF'], # the model's output names
+        #dynamic_axes={'lenet_in' : {0 : 'batch_size'},    # variable length axes
+        #              'lenet_out' : {0 : 'exit_size'}
+        #              }
+    )
+    print("SAVED")
 
 def path_check(string): #checks for valid path
     if os.path.exists(string):
@@ -426,7 +597,8 @@ def path_check(string): #checks for valid path
 
 def main():
     parser = argparse.ArgumentParser(description="script for running pytorch-onnx tests")
-    parser.add_argument('--model',choices=['brn','lenet'],
+    parser.add_argument('--model',choices=['brn','lenet', 'alexnet', 'balexnet',
+        'triplewins','tw_smallcnn','sdn_bb', 'calexsvhn'],
                         help='choose the model')
     parser.add_argument('--trained_path', type=path_check,
                         help='path to trained model')
@@ -441,6 +613,21 @@ def main():
     elif args.model == 'lenet':
         print("ignorning model path provided")
         lenet_main(args, save_name=args.save_name, train=args.train)
+    elif args.model == 'alexnet':
+        print("running Alexnet-bb")
+        alexnet(args, save_name=args.save_name, train=False) #false doesnt do anything here
+    elif args.model == 'triplewins':
+        print("running triple wins bb")
+        triplewins(args, save_name=args.save_name, train=False) #false doesnt do anything here
+    elif args.model == 'sdn_bb':
+        print("running sdn/l2stop sdn resnet bb")
+        sdn_bb(args, save_name=args.save_name, train=False) #false doesnt do anything here
+    elif args.model == 'balexnet':
+        balexnet(md_pth=None, save_name=args.save_name) #false doesnt do anything here
+    elif args.model == 'tw_smallcnn':
+        tw_smallcnn(md_pth=None, save_name=args.save_name) #false doesnt do anything here
+    elif args.model == 'calexsvhn':
+        calexsvhn(md_pth=None, save_name=args.save_name) #false doesnt do anything here
 
 if __name__ == "__main__":
     main()

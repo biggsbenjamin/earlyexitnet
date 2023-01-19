@@ -41,7 +41,6 @@ dependencies:
   - openh264=2.1.0=hd408876_0
   - openssl=1.1.1j=h27cfd23_0
   - pillow=8.1.2=py36he98fc37_0
-  - pip=21.0.1=py36h06a4308_0
   - python=3.6.13=hdb3f193_0
   - pytorch=1.8.0=py3.6_cuda10.2_cudnn7.6.5_0
   - readline=8.1=h27cfd23_0
@@ -58,6 +57,9 @@ dependencies:
   - zstd=1.4.5=h9ceee32_0
   - pip:
     - onnx==1.8.1
+    - onnx-simplifier==0.3.5
+    - onnxoptimizer==0.2.6
     - onnxruntime==1.7.0
+    - pip==21.1
     - protobuf==3.15.6
-prefix: /home/benubu/miniconda3/envs/pt1_8_env
+prefix: /home/localadmin/miniconda3/envs/pt1_8_env
