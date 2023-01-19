@@ -392,3 +392,50 @@ def shape_test(model, dims_in, dims_out, loss_function=nn.CrossEntropyLoss()):
             losses = [loss_function(results, rand_out)]
     return losses
 
+################################
+######  HW datagen funcs  ######
+################################
+def save_batch():
+    # TODO:
+    # target dir - with date, make input
+    # data set - with date, make input
+    target_dir="./IMAGES_1024f/"
+    if not os.path.exists(target_dir):
+        os.mkdir(target_dir)
+    dc = MNISTDataColl(256,256,1)
+
+    test_dl = dc.get_test_dl()
+
+    bs = 1024
+
+    idx=0
+    for xb,yb in test_dl:
+        #print("shape:",xb.shape)
+        #save_image(xb, './IMAGES/img{:05d}.png'.format(idx))
+        np.save(target_dir+('imgf{:05d}.npy'.format(idx)), xb)
+        idx+=1
+        if idx >= bs:
+            break
+    return
+
+def exit_pc(ee_pc=0.70, bs=1024):
+    print("Generating hw test set.")
+    # hw test values
+    # ee_pc: early exit percentage
+    # bs: batch size
+
+    target_dir="./IMAGES_ee-pc{}_bs{}/".format(int(ee_pc*100), bs)
+    if not os.path.exists(target_dir):
+        os.mkdir(target_dir)
+
+    #load examples
+    ee_eg = np.load("./EE_EXAMPLE.npy")
+    le_eg = np.load("./LE_EXAMPLE.npy")
+
+    le_pc = 1-ee_pc
+    hw_test = random.choices([ee_eg, le_eg],
+            weights=[ee_pc,le_pc], k=bs)
+    # save values
+    for idx, sample in enumerate(hw_test):
+        np.save(target_dir+('img{:05d}.npy'.format(idx)) ,sample)
+    return
