@@ -20,12 +20,14 @@ class DataColl:
             batch_size_test=1,
             normalise=False,
             k_cv=None,
-            v_split=None
+            v_split=None,
+            num_workers=1
             ):
         self.batch_size_train = batch_size_train
         self.batch_size_test = batch_size_test
         #bool to normalise training set or not
         self.normalise_train = normalise
+        self.num_workers=num_workers
         #how many equal partitions of the training data for k fold CV, e.g. 5
         self.k_cross_validation = k_cv
         if self.k_cross_validation is not None:
@@ -67,7 +69,8 @@ class DataColl:
             print("WARNING: Normalising data set")
             raise NameError("no normalising till fixed")
             #calc mean and stdev
-            norm_dl = DataLoader(self.full_train_set, batch_size=len(self.full_train_set))
+            norm_dl = DataLoader(self.full_train_set, batch_size=len(self.full_train_set),
+                    num_workers=self.num_workers)
             norm_data = next(iter(norm_dl))
             mean = norm_data[0].mean()
             std = norm_data[0].std()
@@ -91,17 +94,18 @@ class DataColl:
             self.gen_train()
             self.valid_dl = None #reset valid dl in case force not called here
             self.train_dl = DataLoader(self.train_set, batch_size=self.batch_size_train,
-                        drop_last=True, shuffle=True)
+                        drop_last=True, shuffle=True, num_workers=self.num_workers)
         else:
             if self.train_set is None:
                 self.gen_train()
             elif self.train_dl is None:
                 if self.single_split:
                     self.train_dl = DataLoader(self.train_set, batch_size=self.batch_size_train,
-                            drop_last=True, shuffle=True)
+                            drop_last=True, shuffle=True, num_workers=self.num_workers)
                 else:
                     self.train_dl = DataLoader(self.full_train_set, batch_size=self.
-                            batch_size_train,drop_last=True, shuffle=True)
+                            batch_size_train,drop_last=True, shuffle=True,
+                            num_workers=self.num_workers)
         #returns training set
         return self.train_dl
 
@@ -114,7 +118,7 @@ class DataColl:
             self.gen_valid()
         elif self.valid_dl is None:
             self.valid_dl = DataLoader(self.valid_set, batch_size=self.batch_size_train,
-                    drop_last=True, shuffle=True)
+                    drop_last=True, shuffle=True, num_workers=self.num_workers)
         #returns validation split
         return self.valid_dl
 
@@ -126,7 +130,7 @@ class DataColl:
         self.gen_test() #NOTE only assertion for now
         if self.test_dl is None:
             self.test_dl = DataLoader(self.full_test_set, batch_size=self.batch_size_test,
-                    drop_last=True, shuffle=True)
+                    drop_last=True, shuffle=True, num_workers=self.num_workers)
         return self.test_dl
 
 class MNISTDataColl(DataColl):
@@ -196,8 +200,9 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         if isinstance(value,list):
             assert len(value) == self.bin_num, "val list length mismatch {} to {}".format(
                                                                 len(value),self.bin_num)
-            val_array = np.array(value)
-            self.val_bins = self.val_bins + val_array
+            # NOTE having to add loop to get around cpu/gpu mismatch
+            for idx,v in enumerate(value):
+                self.val_bins[idx] = self.val_bins[idx] + v
             self.set_length_accum = self.set_length_accum + 1 #NOTE  mul by bs in the avg
             return
 

@@ -6,9 +6,13 @@ Hopefully going to be a repository of EE models that I can work with in pytorch.
 Requires conda/miniconda for package management.
 To set up the environment: 
 
+For GPU accelerated training:
+`conda env create --file gpu_env.yml`
+
+For PyTorch to ONNX conversion - planned TODO is merge these environments.
 `conda env create --file pt1_8_env.yaml`
 
-## Other python requirements
+## Other python requirements for ONNX env
 installed onnx-1.8.1 
 
 onnxruntime-1.7.0 

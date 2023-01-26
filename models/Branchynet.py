@@ -297,11 +297,14 @@ class B_Alexnet_cifar(B_Lenet):
     def _build_backbone(self):
         strt_bl = nn.Sequential(
                 ConvAcPool(3, 32, kernel=5, stride=1, padding=2),
+                # NOTE LRN not possible on hw
+                #nn.LocalResponseNorm(size=3, alpha=0.000005, beta=0.75),
                 )
         self.backbone.append(strt_bl)
 
         bb_layers = []
         bb_layers.append(ConvAcPool(32, 64, kernel=5, stride=1, padding=2))
+        #bb_layers.append(nn.LocalResponseNorm(size=3, alpha=0.000005, beta=0.75))
         bb_layers.append(nn.Conv2d(64, 96, kernel_size=3,stride=1,padding=1) )
         bb_layers.append(nn.ReLU())
         #branch 2 - ignoring
@@ -314,7 +317,7 @@ class B_Alexnet_cifar(B_Lenet):
         bb_layers.append(nn.Flatten())
         bb_layers.append(nn.Linear(576, 256))
         bb_layers.append(nn.ReLU())
-        #dropout
+        bb_layers.append(nn.Dropout(0.5))
         bb_layers.append(nn.Linear(256, 128))
         bb_layers.append(nn.ReLU())
 
@@ -338,7 +341,7 @@ class B_Alexnet_cifar(B_Lenet):
 
         #final exit
         eeF = nn.Sequential(
-            nn.Flatten(),
+            nn.Dropout(0.5),
             nn.Linear(128,10)
         )
         self.exits.append(eeF)

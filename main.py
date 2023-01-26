@@ -1,6 +1,6 @@
 #training, testing for branchynet-pytorch version
 
-from models.Branchynet import ConvPoolAc,B_Lenet,B_Lenet_fcn,B_Lenet_se, B_Lenet_cifar
+from models.Branchynet import ConvPoolAc,B_Lenet,B_Lenet_fcn,B_Lenet_se, B_Lenet_cifar,B_Alexnet_cifar
 from models.Lenet import Lenet
 from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, Backbone_se
 
@@ -18,13 +18,15 @@ import torchvision.transforms as transforms
 import os
 import numpy as np
 from datetime import datetime as dt
+import time
 
 def get_num_correct(preds, labels):
     return preds.argmax(dim=1).eq(labels).sum().item()
 
 #TODO might merge exit+backbone for code reuse
 def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
-                    loss_f=nn.CrossEntropyLoss(), opt=None, dat_norm=False):
+                    loss_f=nn.CrossEntropyLoss(), opt=None, dat_norm=False,
+                    device=None):
     #train network backbone
 
     if opt is None:
@@ -47,6 +49,12 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
     validloss_trk = LossTracker(batch_size,1)
     validaccu_trk = AccuTracker(batch_size,1)
 
+    if device is None:
+        device = torch.device("cpu")
+
+    # set device model - should be cpu as default
+    model.to(device)
+
     for epoch in range(epochs):
         model.train()
         print("Starting epoch:", epoch+1, end="... ", flush=True)
@@ -60,6 +68,7 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
 
         #training loop
         for xb, yb in train_dl:
+            xb, yb = xb.to(device), yb.to(device)
             results = model(xb)
             #loss for backbone ignores other exits
             #Wasting some forward compute of early exits
@@ -82,6 +91,7 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
         model.eval()
         with torch.no_grad():
             for xb,yb in valid_dl:
+                xb, yb = xb.to(device), yb.to(device)
                 res_v = model(xb)
                 validloss_trk.add_loss(loss_f(res_v[-1], yb))
                 validaccu_trk.update_correct(res_v[-1],yb)
@@ -108,9 +118,11 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
             best_val_accu[1] = savepoint
     print("BEST VAL LOSS: ", best_val_loss[0], " for epoch: ", best_val_loss[1])
     print("BEST VAL ACCU: ", best_val_accu[0], " for epoch: ", best_val_accu[1])
-    #return best_val_loss[1], savepoint #link to best val loss model
-    return best_val_accu[1], savepoint #link to best val accu model - trying for now
 
+    #return best_val_loss[1], savepoint #link to best val loss model
+    # Saving best path in text file
+
+    return best_val_accu[1], savepoint #link to best val accu model - trying for now
 def train_exits(model, epochs=100):
     #train the exits alone
 
@@ -120,27 +132,33 @@ def train_exits(model, epochs=100):
 
 def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
                 loss_f=nn.CrossEntropyLoss(), backbone_epochs=50,
-                joint_epochs=100, pretrain_backbone=True, dat_norm=False):
+                joint_epochs=100, pretrain_backbone=True, dat_norm=False,
+                device=None):
 
     timestamp = dt.now().strftime("%Y-%m-%d_%H%M%S")
 
     if pretrain_backbone:
+        if device is None:
+            device = torch.device("cpu")
         print("PRETRAINING BACKBONE FROM SCRATCH")
         folder_path = 'pre_Trn_bb_' + timestamp
+        # forcing opt to be none so only bb params are trained
         best_bb_path,_ = train_backbone(model, train_dl,
                 valid_dl, batch_size, os.path.join(save_path, folder_path),
-                epochs=backbone_epochs, loss_f=loss_f,dat_norm=dat_norm)
+                epochs=backbone_epochs, loss_f=loss_f,dat_norm=dat_norm,
+                opt=None,device=device)
         #train the rest...
         print("LOADING BEST BACKBONE:",best_bb_path)
         load_model(model, best_bb_path)
         print("JOINT TRAINING WITH PRETRAINED BACKBONE")
-
         prefix = 'pretrn-joint'
+        bb_path=best_bb_path
     else:
         #jointly trains backbone and exits from scratch
         print("JOINT TRAINING FROM SCRATCH")
         folder_path = 'jnt_fr_scrcth' + timestamp
         prefix = 'joint'
+        bb_path="no bb pre-training"
 
     spth = os.path.join(save_path, folder_path)
 
@@ -159,6 +177,12 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
     train_accu_trk = AccuTracker(train_dl.batch_size,bins=2)
     valid_loss_trk = LossTracker(valid_dl.batch_size,bins=2)
     valid_accu_trk = AccuTracker(valid_dl.batch_size,bins=2)
+
+    # set device model - should be cpu as default
+    if device is None:
+        device = torch.device("cpu")
+    model.to(device)
+
     for epoch in range(joint_epochs):
         model.train()
         print("starting epoch:", epoch+1, end="... ", flush=True)
@@ -168,6 +192,7 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
         train_accu_trk.reset_tracker()
         #training loop
         for xb, yb in train_dl:
+            xb, yb = xb.to(device), yb.to(device)
             results = model(xb)
 
             raw_losses = [loss_f(res,yb) for res in results]
@@ -198,6 +223,7 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
         model.eval()
         with torch.no_grad():
             for xb,yb in valid_dl:
+                xb, yb = xb.to(device), yb.to(device)
                 res = model(xb)
                 valid_loss_trk.add_loss([loss_f(exit, yb) for exit in res])
                 valid_accu_trk.update_correct(res,yb)
@@ -236,11 +262,11 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
     print("BEST* VAL ACCU: ", best_val_accu[0], " for epoch: ", best_val_accu[1])
     #return best val loss path link
     #return best_val_loss[1],savepoint
-    return best_val_accu[1],savepoint
+    return best_val_accu[1],savepoint,bb_path
 
 class Tester:
     def __init__(self,model,test_dl,loss_f=nn.CrossEntropyLoss(),exits=2,
-            top1acc_thresholds=[],entropy_thresholds=[]):
+            top1acc_thresholds=[],entropy_thresholds=[],device=None):
         self.model=model
         self.test_dl=test_dl
         self.loss_f=loss_f
@@ -248,6 +274,12 @@ class Tester:
         self.sample_total = len(test_dl)
         self.top1acc_thresholds = top1acc_thresholds
         self.entropy_thresholds = entropy_thresholds
+        if device is None or not torch.cuda.is_available():
+            self.device = torch.device("cpu")
+        else:
+            self.device = device
+
+
         if exits > 1:
             #TODO make thresholds a more flexible param
             #setting top1acc threshold for exiting (final exit set to 0)
@@ -275,8 +307,10 @@ class Tester:
 
     def _test_multi_exit(self):
         self.model.eval()
+        self.model.to(self.device)
         with torch.no_grad():
             for xb,yb in self.test_dl:
+                xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
                 self.accu_track_totl.update_correct(res,yb)
                 for i,(exit,thr) in enumerate(zip(res,self.top1acc_thresholds)):
@@ -297,14 +331,18 @@ class Tester:
                         break
     def _test_single_exit(self):
         self.model.eval()
+        self.model.to(self.device)
         with torch.no_grad():
             for xb,yb in self.test_dl:
+                xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
                 self.accu_track_totl.update_correct(res,yb)
     def debug_values(self):
         self.model.eval()
+        self.model.to(self.device)
         with torch.no_grad():
             for xb,yb in test_dl:
+                xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
                 for i,exit in enumerate(res):
                     #print("raw exit {}: {}".format(i, exit))
@@ -336,6 +374,7 @@ def train_n_test(args):
     #shape testing
     #print(shape_test(model, [1,28,28], [1])) #output is not one hot encoded
 
+
     exits = 1 # set number of exits
     #set up the model specified in args
     if args.model_name == 'lenet':
@@ -363,19 +402,31 @@ def train_n_test(args):
         model = B_Lenet_cifar()
         exits = 2
         print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
+    elif args.model_name == 'b_alexnet_cifar':
+        model = B_Alexnet_cifar()
+        exits = 2
+        print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
     else:
         raise NameError("Model not supported, check name:",args.model_name)
     print("Model done:", args.model_name)
+
+    # Device setup
+    if torch.cuda.is_available() and args.gpu is not None:
+        device = torch.device(f"cuda:{args.gpu}")
+    else:
+        device = torch.device("cpu")
+    print("Device:", device)
+    print("Number of workers:",args.num_workers)
 
     #set loss function - og bn used "softmax_cross_entropy" unclear if this is the same
     loss_f = nn.CrossEntropyLoss() # combines log softmax and negative log likelihood
     print("Loss function set")
     batch_size_test = 1 #test bs in branchynet
     normalise=False     #normalise the training data or not
-
-
+    bb_path=None    # init for notes of pre trained bb
 
     if args.trained_model_path is not None:
+        # NOTE only performing testing on trained model
         #load in the model from the path
         load_model(model, args.trained_model_path)
         #skip to testing
@@ -393,15 +444,16 @@ def train_n_test(args):
         #get data and load if not already exiting - MNIST for now
         batch_size_train = 500 #training bs in branchynet
         validation_split = 0.2
+        num_workers = 1 if args.num_workers is None else args.num_workers
         #sort into training, and test data
         if args.dataset == 'mnist':
             datacoll = MNISTDataColl(batch_size_train=batch_size_train,
                     batch_size_test=batch_size_test,normalise=normalise,
-                    v_split=validation_split)
+                    v_split=validation_split, num_workers=num_workers)
         elif args.dataset == 'cifar10':
             datacoll = CIFAR10DataColl(batch_size_train=batch_size_train,
                     batch_size_test=batch_size_test,normalise=normalise,
-                    v_split=validation_split)
+                    v_split=validation_split, num_workers=num_workers)
         else:
             raise NameError("Dataset not supported, check name:",args.dataset)
         train_dl = datacoll.get_train_dl()
@@ -412,10 +464,17 @@ def train_n_test(args):
         path_str = 'outputs/'
         print("backbone epochs: {} joint epochs: {}".format(args.bb_epochs, args.jt_epochs))
 
+
+        pretrain_backbone=True
+        if args.bb_epochs == 0:
+            # FIXME check if backbone provided (training exits/joint) or joint from scratch
+            pretrain_backbone=False
+
         if exits > 1:
-            save_path,last_path = train_joint(model, train_dl, valid_dl, batch_size_train,
+            save_path,last_path,bb_path = train_joint(model, train_dl, valid_dl, batch_size_train,
                     path_str,backbone_epochs=args.bb_epochs,joint_epochs=args.jt_epochs,
-                    loss_f=loss_f,pretrain_backbone=True,dat_norm=normalise)
+                    loss_f=loss_f,pretrain_backbone=pretrain_backbone,dat_norm=normalise,
+                    device=device)
         else:
             #provide optimiser for non ee network
             lr = 0.001 #Adam algo - step size alpha=0.001
@@ -428,7 +487,8 @@ def train_n_test(args):
             print("Saving to:",path_str)
             save_path,last_path = train_backbone(model, train_dl, valid_dl,
                     batch_size=batch_size_train, save_path=path_str, epochs=args.bb_epochs,
-                    loss_f=loss_f, opt=opt, dat_norm=normalise)
+                    loss_f=loss_f, opt=opt, dat_norm=normalise,
+                    device=device)
 
         #save some notes about the run
         notes_path = os.path.join(os.path.split(save_path)[0],'notes.txt')
@@ -438,6 +498,7 @@ def train_n_test(args):
                                                                            batch_size_test))
             if hasattr(model,'exit_loss_weights'):
                 notes.write("model training exit weights:"+str(model.exit_loss_weights)+"\n")
+            notes.write("Path to BB model:\n"+str(bb_path)+"\n")
             notes.write("Path to last model:"+str(last_path)+"\n")
         notes.close()
 
@@ -453,6 +514,9 @@ def train_n_test(args):
                 top1_thr,entr_thr)
     else:
         net_test = Tester(model,test_dl,loss_f,exits)
+    # NOTE back to cpu for testing
+    model.to("cpu")
+
     top1_thr = net_test.top1acc_thresholds
     entr_thr = net_test.entropy_thresholds
     net_test.test()

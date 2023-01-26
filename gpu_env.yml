@@ -1,0 +1,9 @@
+name: ee_gpu_py39
+channels:
+  - defaults
+dependencies:
+  - pytorch-cuda=11.6
+  - pytorch
+  - torchvision
+  - torchaudio
+prefix: /home/bb2515/miniconda3/envs/ee_gpu_py39

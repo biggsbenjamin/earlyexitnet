@@ -23,6 +23,7 @@ def main():
                         'brnsecond',
                         'backbone_se',
                         'b_lenet_cifar',
+                        'b_alexnet_cifar',
                         ],
             required=True, help='select the model name')
 
@@ -47,6 +48,12 @@ def main():
     #threshold inputs for testing
     parser.add_argument('-t1','--top1_threshold',type=float,required=False)
     parser.add_argument('-entr','--entr_threshold',type=float,required=False)
+
+    # choose the cuda device to target
+    parser.add_argument('-gpu','--gpu',type=int,required=False,
+            help="GPU acceleration target, int val for torch.device( cuda:[?] )")
+    parser.add_argument('-wrks','--num_workers',type=int,required=False,
+            help="Number of workers for data loaders")
 
     #TODO arguments to add
         #batch size training
