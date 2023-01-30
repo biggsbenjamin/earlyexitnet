@@ -162,6 +162,11 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
 
     spth = os.path.join(save_path, folder_path)
 
+    if hasattr(model,'exit_num'):
+        exits=model.exit_num
+    else:
+        exits=2
+
     #set up the joint optimiser
     if opt is None: #TODO separate optim function to reduce code, maybe pass params?
         #set to branchynet default
@@ -171,12 +176,12 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
 
         opt = optim.Adam(model.parameters(), betas=exp_decay_rates, lr=lr)
 
-    best_val_loss = [[1.0,1.0], ''] #TODO make sure list size matches num of exits
-    best_val_accu = [[0.0,0.0], ''] #TODO make sure list size matches num of exits
-    train_loss_trk = LossTracker(train_dl.batch_size,bins=2)
-    train_accu_trk = AccuTracker(train_dl.batch_size,bins=2)
-    valid_loss_trk = LossTracker(valid_dl.batch_size,bins=2)
-    valid_accu_trk = AccuTracker(valid_dl.batch_size,bins=2)
+    best_val_loss = [[1.0]*exits, ''] #TODO make sure list size matches num of exits
+    best_val_accu = [[0.0]*exits, ''] #TODO make sure list size matches num of exits
+    train_loss_trk = LossTracker(train_dl.batch_size,bins=exits)
+    train_accu_trk = AccuTracker(train_dl.batch_size,bins=exits)
+    valid_loss_trk = LossTracker(valid_dl.batch_size,bins=exits)
+    valid_accu_trk = AccuTracker(valid_dl.batch_size,bins=exits)
 
     # set device model - should be cpu as default
     if device is None:
@@ -186,8 +191,8 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
     for epoch in range(joint_epochs):
         model.train()
         print("starting epoch:", epoch+1, end="... ", flush=True)
-        train_loss = [0.0,0.0]
-        correct_count = [0,0]
+        train_loss = [0.0]*exits
+        correct_count = [0]*exits
         train_loss_trk.reset_tracker()
         train_accu_trk.reset_tracker()
         #training loop
@@ -279,13 +284,7 @@ class Tester:
         else:
             self.device = device
 
-
         if exits > 1:
-            #TODO make thresholds a more flexible param
-            #setting top1acc threshold for exiting (final exit set to 0)
-            #self.top1acc_thresholds = [0.995,0]
-            #setting entropy threshold for exiting (final exit set to LARGE)
-            #self.entropy_thresholds = [0.025,1000000]
             #set up stat trackers
             #samples exited
             self.exit_track_top1 = Tracker(test_dl.batch_size,exits,self.sample_total)
@@ -371,9 +370,6 @@ class Tester:
         #TODO save test stats along with link to saved model
 
 def train_n_test(args):
-    #shape testing
-    #print(shape_test(model, [1,28,28], [1])) #output is not one hot encoded
-
 
     exits = 1 # set number of exits
     #set up the model specified in args
@@ -391,20 +387,20 @@ def train_n_test(args):
         model = Backbone_se()
     elif args.model_name == 'b_lenet':
         model = B_Lenet()
-        exits = 2
+        exits = model.exit_num
     elif args.model_name == 'b_lenet_fcn':
         model = B_Lenet_fcn()
-        exits = 2
+        exits = model.exit_num
     elif args.model_name == 'b_lenet_se':
         model = B_Lenet_se()
-        exits = 2
+        exits = model.exit_num
     elif args.model_name == 'b_lenet_cifar':
         model = B_Lenet_cifar()
-        exits = 2
+        exits = model.exit_num
         print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
     elif args.model_name == 'b_alexnet_cifar':
         model = B_Alexnet_cifar()
-        exits = 2
+        exits = model.exit_num
         print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
     else:
         raise NameError("Model not supported, check name:",args.model_name)
@@ -464,7 +460,6 @@ def train_n_test(args):
         path_str = 'outputs/'
         print("backbone epochs: {} joint epochs: {}".format(args.bb_epochs, args.jt_epochs))
 
-
         pretrain_backbone=True
         if args.bb_epochs == 0:
             # FIXME check if backbone provided (training exits/joint) or joint from scratch
@@ -508,14 +503,19 @@ def train_n_test(args):
     test_dl = datacoll.get_test_dl()
     #once trained, run it on the test data
     if exits>1:
-        top1_thr = [args.top1_threshold, 0]
-        entr_thr = [args.entr_threshold, 1000000]
+        if len(args.top1_threshold)+1 != exits or \
+            len(args.entr_threshold)+1 != exits:
+                raise ValueError(f"Not enough arguments for threshold. Expecting {exits-1}")
+        # Adding final exit thr - must exit here so tiny/huge depending on criteria
+        top1_thr = args.top1_threshold
+        top1_thr.append(0)
+        entr_thr = args.entr_threshold
+        entr_thr.append(1000000)
+        # Creating Tester object
         net_test = Tester(model,test_dl,loss_f,exits,
-                top1_thr,entr_thr)
+                top1_thr,entr_thr, device=device)
     else:
-        net_test = Tester(model,test_dl,loss_f,exits)
-    # NOTE back to cpu for testing
-    model.to("cpu")
+        net_test = Tester(model,test_dl,loss_f,exits,device=device)
 
     top1_thr = net_test.top1acc_thresholds
     entr_thr = net_test.entropy_thresholds
@@ -555,8 +555,6 @@ def train_n_test(args):
         if args.run_notes is not None:
             notes.write(args.run_notes+"\n")
     notes.close()
-
-    #be nice to have comparison against pytorch pretrained LeNet from pytorch
 
 if __name__ == "__main__":
     train_n_test()

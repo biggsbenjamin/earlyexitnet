@@ -45,9 +45,9 @@ def main():
             choices=['mnist','cifar10','cifar100'],
             required=False, default='mnist',
             help='select the dataset, default is mnist')
-    #threshold inputs for testing
-    parser.add_argument('-t1','--top1_threshold',type=float,required=False)
-    parser.add_argument('-entr','--entr_threshold',type=float,required=False)
+    #threshold inputs for testing, 1 or more args - user should know model
+    parser.add_argument('-t1','--top1_threshold', nargs='+',type=float,required=False)
+    parser.add_argument('-entr','--entr_threshold', nargs='+',type=float,required=False)
 
     # choose the cuda device to target
     parser.add_argument('-gpu','--gpu',type=int,required=False,
