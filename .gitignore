@@ -10,3 +10,7 @@ net_graph.jpg.pdf
 *.pyc
 **/old/**
 *.npy
+
+build/
+.eggs/
+*.egg-info/

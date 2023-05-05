@@ -13,8 +13,6 @@ installed onnx-1.8.1
 
 onnxruntime-1.7.0 
 
-protobuf-3.15.5
-
 Can be installed from conda env with:
 
 `pip install onnx onnxruntime`
