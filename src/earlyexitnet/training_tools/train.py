@@ -266,18 +266,21 @@ raw v loss:{} v accu:{}""".format(tr_loss_avg,
         return self.best_val_accu["savepoint"], savepoint
 
     def train_backbone(self, internal_folder=None):
-        #NOTE set to branchynet default
         #Adam algo - step size alpha=0.001
         lr = 0.001
         #exponetial decay rates for 1st & 2nd moment: 0.99, 0.999
         exp_decay_rates = [0.99, 0.999]
-        # selecting only backbone params
-        backbone_params = [
-                {'params': self.model.backbone.parameters()},
-                {'params': self.model.exits[-1].parameters()}
-                ]
-
-        opt = optim.Adam(backbone_params, betas=exp_decay_rates, lr=lr)
+        if self.exits>1:
+            #NOTE set to branchynet default
+            # selecting only backbone params
+            backbone_params = [
+                    {'params': self.model.backbone.parameters()},
+                    {'params': self.model.exits[-1].parameters()}
+                    ]
+            opt = optim.Adam(backbone_params, betas=exp_decay_rates, lr=lr)
+        else:
+            opt = optim.Adam(self.model.parameters(),
+                             betas=exp_decay_rates, lr=lr)
 
         # set up single exit tracker
         self._tracker_init(training_exits=False)

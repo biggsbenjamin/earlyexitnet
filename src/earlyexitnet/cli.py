@@ -13,10 +13,13 @@ from earlyexitnet.training_tools.train import Trainer,get_model
 from earlyexitnet.testing_tools.test import Tester
 
 # import dataloaders from tools
-from earlyexitnet.tools import MNISTDataColl,CIFAR10DataColl
+from earlyexitnet.tools import MNISTDataColl,CIFAR10DataColl,load_model
 
 # import nn for loss function
 import torch.nn as nn
+# general imports
+import os
+from datetime import datetime as dt
 
 def get_exits(model_str):
     # set number of exits
@@ -91,9 +94,10 @@ def test(datacoll,model,exits,loss_f,
     print("top1 acc % {}, entr acc % {}".format(t1_tot_acc,ent_tot_acc))
     print("Accuracy of the individual exits over full set: {}".format(full_exit_accu))
 
+    ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
     with open(notes_path, 'a') as notes:
         notes.write("\n#######################################\n")
-        notes.write(f"\nTesting results: for {args.model_name}\n")
+        notes.write(f"\nTesting results: for {args.model_name} @ {ts}\n  ")
         notes.write(f"on dataset {args.dataset}\n")
         notes.write("Test sample size: {}\n".format(test_size))
         notes.write("top1 thrs: {},  entropy thrs: {}\n".format(top1_thr, entr_thr))
@@ -121,7 +125,7 @@ def train_n_test(args):
     loss_f = nn.CrossEntropyLoss() # combines log softmax and negative log likelihood
     print("Loss function set")
     print("Training new network")
-    #get data and load if not already exiting - MNIST for now
+    #get data and load if not already exiting - MNIST for no w
     #training bs in branchynet
     batch_size_train = args.batch_size_train
     # split the training data into training and validation (test is separate)
@@ -247,7 +251,7 @@ def main():
     args = parser.parse_args()
 
     if args.trained_model_path is not None:
-        setup_test_only(args)
+        test_only(args)
     else:
         train_n_test(args)
 
