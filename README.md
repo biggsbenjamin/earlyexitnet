@@ -2,31 +2,34 @@
 Hopefully going to be a repository of EE models that I can work with in pytorch.
 `BranchyNet.py` is based on the branchy-LeNet model from the [BranchyNet](https://github.com/kunglab/branchynet) repo.
 
-## Conda Environment
-Requires conda/miniconda for package management.
-To set up the environment: 
 
-`conda env create --file pt1_8_env.yaml`
+## Python Setup
+Recommeded conda/miniconda for package management.
 
-## Other python requirements
+1. Set up a python 3.9 environment and activate it:
+
+```
+conda create -n py39 python=3.9
+conda activate py39
+```
+
+2. Upgrade to latest version of pip.
+
+`python -m pip install --upgrade pip`
+
+3. Install package from current directory (earlyexitnetwork):
+
+`pip install .`
+
+### Python requirements - included in package
 installed onnx-1.8.1 
 
 onnxruntime-1.7.0 
 
-Can be installed from conda env with:
+## Train Network Example
 
-`pip install onnx onnxruntime`
+`python -m earlyexitnet.cli -m b_lenet -bbe 2 -jte 3 -rn "run notes example" -t1 0.75 -entr 0.01`
 
 ## Getting visual representation of the onnx graph
 Use [netron](ihttps://netron.app/) viewer
 
-## Running onnx test script
-Should work from environment `pt1_8_env.yaml`
-
-Requires path to trained network for branchynet, not required for testnet/lenet.
-
-Command:
-`python test_onnx.py --model [brn, lenet] --trained_path path/to/trained/branchynet.pth --save_name onnx_save_name`
-
-Example:
-`python test_onnx.py --model brn --trained_path /home/localadmin/phd/earlyexitnet/outputs/pre_Trn_bb_2021-07-09_141616/pretrn-joint-8-2021-07-09_142311.pth --save_name test_out`

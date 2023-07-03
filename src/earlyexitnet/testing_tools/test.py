@@ -6,6 +6,20 @@ Includes requires accuracy and loss trackers from tools
 # importing trackers for loss + accuracy, and generic tracker for exit distribution
 from earlyexitnet.tools import Tracker, LossTracker, AccuTracker
 
+# pytorch imports
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import \
+    DataLoader, Dataset, TensorDataset, random_split
+import torchvision
+import torchvision.transforms as transforms
+
+# general imports
+import os
+import numpy as np
+from datetime import datetime as dt
+
 class Tester:
     def __init__(self,model,test_dl,loss_f=nn.CrossEntropyLoss(),exits=2,
             top1acc_thresholds=[],entropy_thresholds=[]):
@@ -32,7 +46,8 @@ class Tester:
             self.accu_track_entr = AccuTracker(test_dl.batch_size,exits)
 
         #total exit accuracy over the test data
-        self.accu_track_totl = AccuTracker(test_dl.batch_size,exits,self.sample_total)
+        self.accu_track_totl = AccuTracker(
+            test_dl.batch_size,exits,self.sample_total)
 
         self.top1_pc = None # % exit for top1 confidence
         self.entr_pc = None # % exit for entropy confidence
@@ -48,7 +63,9 @@ class Tester:
             for xb,yb in self.test_dl:
                 res = self.model(xb)
                 self.accu_track_totl.update_correct(res,yb)
-                for i,(exit,thr) in enumerate(zip(res,self.top1acc_thresholds)):
+                for i,(exit,thr) in enumerate(
+                        zip(res,self.top1acc_thresholds)):
+                    ### NOTE DEFINING TOP1 of SOFTMAX DECISION
                     softmax = nn.functional.softmax(exit,dim=-1)
                     sftmx_max = torch.max(softmax)
                     if sftmx_max > thr:

@@ -189,7 +189,7 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         #init bins
         self.bin_num = bins
         self.val_bins = np.zeros(bins,dtype=np.float64)
-        self.set_length_accum = np.zeros(bins,dtype=np.int)
+        self.set_length_accum = np.zeros(bins,dtype=int)
 
     ### functions to use ###
     def add_val(self,value,bin_index=None): #adds val(s) for single iteration
@@ -282,8 +282,8 @@ class AccuTracker(Tracker):
         self.set_length = set_length
         #init bins
         self.bin_num = bins
-        self.val_bins = np.zeros(bins,dtype=np.int)
-        self.set_length_accum = np.zeros(bins,dtype=np.int)
+        self.val_bins = np.zeros(bins,dtype=int)
+        self.set_length_accum = np.zeros(bins,dtype=int)
     def get_num_correct(self, preds, labels):
         #predictions from model (not one hot), correct labels
         return preds.argmax(dim=1).eq(labels).sum().item()
