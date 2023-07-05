@@ -1,6 +1,7 @@
 #training, testing for branchynet-pytorch version
 
 from models.Branchynet import ConvPoolAc,B_Lenet,B_Lenet_fcn,B_Lenet_se, B_Lenet_cifar,B_Alexnet_cifar
+from models.resnetv1Xhapi import ResNet8v1
 from models.Lenet import Lenet
 from models.Testnet import Testnet, BrnFirstExit, BrnSecondExit, Backbone_se
 
@@ -19,6 +20,7 @@ import os
 import numpy as np
 from datetime import datetime as dt
 import time
+import wandb
 
 def get_num_correct(preds, labels):
     return preds.argmax(dim=1).eq(labels).sum().item()
@@ -99,6 +101,14 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
         val_loss_avg = validloss_trk.get_avg(return_list=True)[-1]#should be last of 1
         val_accu_avg = validaccu_trk.get_avg(return_list=True)[-1]
 
+        # Logging to w and b
+        wandb.log({
+            "BB T Loss":tr_loss_avg,
+            "BB T T1 Acc": t1acc,
+            "BB V Loss": val_loss_avg,
+            "BB V T1 Acc": val_accu_avg
+            })
+
         print(  "T Loss:",tr_loss_avg,
                 "T T1 Acc: ", t1acc,
                 "V Loss:", val_loss_avg,
@@ -116,6 +126,7 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
         if val_accu_avg > best_val_accu[0]:
             best_val_accu[0] = val_accu_avg
             best_val_accu[1] = savepoint
+    # BB training epochs done
     print("BEST VAL LOSS: ", best_val_loss[0], " for epoch: ", best_val_loss[1])
     print("BEST VAL ACCU: ", best_val_accu[0], " for epoch: ", best_val_accu[1])
 
@@ -123,11 +134,28 @@ def train_backbone(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
     # Saving best path in text file
 
     return best_val_accu[1], savepoint #link to best val accu model - trying for now
-def train_exits(model, epochs=100):
+
+def train_exits(model, train_dl, valid_dl, batch_size, save_path, epochs=50,
+                    loss_f=nn.CrossEntropyLoss(), opt=None, dat_norm=False,
+                    device=None):
     #train the exits alone
+
+    if opt is None:
+        #set to branchynet opt default
+        #Adam algo - step size alpha=0.001
+        lr = 0.001
+        #exponetial decay rates for 1st & 2nd moment: 0.99, 0.999
+        exp_decay_rates = [0.99, 0.999]
+        backbone_params = [
+                {'params': model.backbone.parameters()},
+                {'params': model.exits[-1].parameters()}
+                ]
+
+        opt = optim.Adam(backbone_params, betas=exp_decay_rates, lr=lr)
 
     #Adam algo - step size alpha=0.001
     #exponetial decay rates for 1st & 2nd moment: 0.99, 0.999
+    # FIXME
     return #something trained
 
 def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
@@ -221,8 +249,9 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
 
 
         tr_loss_avg_weighted = [loss/(len(train_dl)*batch_size) for loss in train_loss]
-        tr_loss_avg = train_loss_trk.get_avg(return_list=True)
-        t1acc = train_accu_trk.get_accu(return_list=True)
+        # training loss avg
+        tr_loss_avg = train_loss_trk.get_avg(return_list=False)
+        t1acc = train_accu_trk.get_accu(return_list=False)
 
         #validation
         model.eval()
@@ -233,8 +262,18 @@ def train_joint(model, train_dl, valid_dl, batch_size, save_path, opt=None,
                 valid_loss_trk.add_loss([loss_f(exit, yb) for exit in res])
                 valid_accu_trk.update_correct(res,yb)
 
-        val_loss_avg = valid_loss_trk.get_avg(return_list=True)
-        val_accu_avg = valid_accu_trk.get_accu(return_list=True)
+        val_loss_avg = valid_loss_trk.get_avg(return_list=False)
+        val_accu_avg = valid_accu_trk.get_accu(return_list=False)
+
+        # Logging to w and b
+        for ex,tr_lss,tr_t1,val_lss, val_t1 in enumerate(zip(
+            tr_loss_avg,t1acc,val_loss_avg,val_accu_avg)):
+            wandb.log({
+                f"JNT T Loss Ex:{ex}":tr_loss_avg,
+                f"JNT T T1 Acc Ex:{ex}": t1acc,
+                f"JNT V Loss Ex:{ex}": val_loss_avg,
+                f"JNT V T1 Acc Ex:{ex}": val_accu_avg
+                })
 
         print("raw t loss:{} t1acc:{}\nraw v loss:{} v accu:{}".format(
             tr_loss_avg,t1acc,val_loss_avg,val_accu_avg))
@@ -371,6 +410,13 @@ class Tester:
 
 def train_n_test(args):
 
+    # Set up logging with W&Bs
+    wandb.init(
+            project="better-ee-gpu",
+            # ideally all the args...
+            config=vars(args),
+            )
+
     exits = 1 # set number of exits
     #set up the model specified in args
     if args.model_name == 'lenet':
@@ -402,6 +448,10 @@ def train_n_test(args):
         model = B_Alexnet_cifar()
         exits = model.exit_num
         print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
+    elif args.model_name == 'hapi_resnet8':
+        model = ResNet8v1()
+        exits = model.exit_num
+        print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
     else:
         raise NameError("Model not supported, check name:",args.model_name)
     print("Model done:", args.model_name)
@@ -414,7 +464,7 @@ def train_n_test(args):
     print("Device:", device)
     print("Number of workers:",args.num_workers)
 
-    #set loss function - og bn used "softmax_cross_entropy" unclear if this is the same
+    #set loss function
     loss_f = nn.CrossEntropyLoss() # combines log softmax and negative log likelihood
     print("Loss function set")
     batch_size_test = 1 #test bs in branchynet
@@ -437,9 +487,10 @@ def train_n_test(args):
         save_path = args.trained_model_path
 
     else:
-        #get data and load if not already exiting - MNIST for now
-        batch_size_train = 500 #training bs in branchynet
+        #get data and load if not already exiting
+        batch_size_train = args.batch_size #training bs
         validation_split = 0.2
+        # get workers for data loading from cpu to gpu
         num_workers = 1 if args.num_workers is None else args.num_workers
         #sort into training, and test data
         if args.dataset == 'mnist':
@@ -503,13 +554,18 @@ def train_n_test(args):
     test_dl = datacoll.get_test_dl()
     #once trained, run it on the test data
     if exits>1:
-        if len(args.top1_threshold)+1 != exits or \
+        top1_thr = args.top1_threshold
+        entr_thr = args.entr_threshold
+        if len(args.top1_threshold) == 1 or \
+            len(args.entr_threshold) == 1:
+                print("WARNING: Setting threshold to 1st value ONLY.")
+                top1_thr = [args.top1_threshold[0]]*(exits-1)
+                entr_thr = [args.entr_threshold[0]]*(exits-1)
+        elif len(args.top1_threshold)+1 != exits or \
             len(args.entr_threshold)+1 != exits:
                 raise ValueError(f"Not enough arguments for threshold. Expecting {exits-1}")
         # Adding final exit thr - must exit here so tiny/huge depending on criteria
-        top1_thr = args.top1_threshold
         top1_thr.append(0)
-        entr_thr = args.entr_threshold
         entr_thr.append(1000000)
         # Creating Tester object
         net_test = Tester(model,test_dl,loss_f,exits,

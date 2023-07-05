@@ -24,6 +24,7 @@ def main():
                         'backbone_se',
                         'b_lenet_cifar',
                         'b_alexnet_cifar',
+                        'hapi_resnet8',
                         ],
             required=True, help='select the model name')
 
@@ -31,6 +32,8 @@ def main():
             required=False,
             help='Path to previously trained model to load, the same type as model name')
 
+    parser.add_argument('-bs','--batch_size', metavar='N',type=int, default=500, required=False,
+            help='Batch size for training network')
     parser.add_argument('-bbe','--bb_epochs', metavar='N',type=int, default=1, required=False,
             help='Epochs to train backbone separately, or non ee network')
     parser.add_argument('-jte','--jt_epochs', metavar='N',type=int, default=1, required=False,
@@ -56,10 +59,11 @@ def main():
             help="Number of workers for data loaders")
 
     #TODO arguments to add
-        #batch size training
         #batch size testing
+        #validation split
         #training loss function
         #some kind of testing specification
+        #ee threshold sweep testing
 
     # parse the arguments
     args = parser.parse_args()
