@@ -142,7 +142,7 @@ class B_Lenet(nn.Module):
             top1 = torch.max(pk) #x)
             return top1 > self.exit_threshold
 
-    @torch.jit.unused #decorator to skip jit comp
+    @torch.jit.unused
     def _forward_training(self, x):
         #TODO make jit compatible - not urgent
         #broken because returning list()
@@ -290,7 +290,7 @@ class B_Alexnet_cifar(B_Lenet):
         self.exit_threshold = torch.tensor([exit_threshold], dtype=torch.float32)
         self.backbone = nn.ModuleList()
         self.exits = nn.ModuleList()
-        self.exit_loss_weights = [1.0, 1.0, 1.0] #weighting for each exit when summing loss
+        self.exit_loss_weights = [0.8, 1.0, 0.6] #weighting for each exit when summing loss
         #weight initialisiation - for standard layers this is done automagically
         self._build_backbone()
         self._build_exits()
