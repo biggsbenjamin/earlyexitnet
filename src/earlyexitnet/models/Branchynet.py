@@ -72,6 +72,7 @@ class B_Lenet(nn.Module):
         #self.fast_inf_batch_size = fast_inf_batch_size #add to input args if used
         #self.exit_fn = entropy
         self.exit_threshold = torch.tensor([exit_threshold], dtype=torch.float32) #TODO learnable, better default value
+        self.exit_num=2 #NOTE early and late exits
 
         self.backbone = nn.ModuleList()
         self.exits = nn.ModuleList()
@@ -283,46 +284,46 @@ class B_Alexnet_cifar(B_Lenet):
     # attempt 1 exit alexnet
     def __init__(self, exit_threshold=0.5):
         super(B_Lenet, self).__init__()
+        self.exit_num=3
 
         self.fast_inference_mode = False
         self.exit_threshold = torch.tensor([exit_threshold], dtype=torch.float32)
         self.backbone = nn.ModuleList()
         self.exits = nn.ModuleList()
-        self.exit_loss_weights = [1.0, 0.3] #weighting for each exit when summing loss
+        self.exit_loss_weights = [1.0, 1.0, 1.0] #weighting for each exit when summing loss
         #weight initialisiation - for standard layers this is done automagically
         self._build_backbone()
         self._build_exits()
         self.le_cnt=0
 
     def _build_backbone(self):
-        strt_bl = nn.Sequential(
+        bb_layers0 = nn.Sequential(
                 ConvAcPool(3, 32, kernel=5, stride=1, padding=2),
                 # NOTE LRN not possible on hw
                 #nn.LocalResponseNorm(size=3, alpha=0.000005, beta=0.75),
                 )
-        self.backbone.append(strt_bl)
+        self.backbone.append(bb_layers0)
 
-        bb_layers = []
-        bb_layers.append(ConvAcPool(32, 64, kernel=5, stride=1, padding=2))
-        #bb_layers.append(nn.LocalResponseNorm(size=3, alpha=0.000005, beta=0.75))
-        bb_layers.append(nn.Conv2d(64, 96, kernel_size=3,stride=1,padding=1) )
-        bb_layers.append(nn.ReLU())
-        #branch 2 - ignoring
-        #conv4
-        bb_layers.append(nn.Conv2d(96, 96, kernel_size=3,stride=1,padding=1))
-        bb_layers.append(nn.ReLU())
-        bb_layers.append(nn.Conv2d(96, 64, kernel_size=3,stride=1,padding=1))
-        bb_layers.append(nn.ReLU())
-        bb_layers.append(nn.MaxPool2d(3,stride=2,ceil_mode=False))
-        bb_layers.append(nn.Flatten())
-        bb_layers.append(nn.Linear(576, 256))
-        bb_layers.append(nn.ReLU())
-        bb_layers.append(nn.Dropout(0.5))
-        bb_layers.append(nn.Linear(256, 128))
-        bb_layers.append(nn.ReLU())
+        bb_layers1 = []
+        bb_layers1.append(ConvAcPool(32, 64, kernel=5, stride=1, padding=2))
+        #bb_layers1.append(nn.LocalResponseNorm(size=3, alpha=0.000005, beta=0.75))
+        bb_layers1.append(nn.Conv2d(64, 96, kernel_size=3,stride=1,padding=1) )
+        bb_layers1.append(nn.ReLU())
+        self.backbone.append(nn.Sequential(*bb_layers1))
 
-        remaining_backbone_layers = nn.Sequential(*bb_layers)
-        self.backbone.append(remaining_backbone_layers)
+        bb_layers2 = []
+        bb_layers2.append(nn.Conv2d(96, 96, kernel_size=3,stride=1,padding=1))
+        bb_layers2.append(nn.ReLU())
+        bb_layers2.append(nn.Conv2d(96, 64, kernel_size=3,stride=1,padding=1))
+        bb_layers2.append(nn.ReLU())
+        bb_layers2.append(nn.MaxPool2d(3,stride=2,ceil_mode=False))
+        bb_layers2.append(nn.Flatten())
+        bb_layers2.append(nn.Linear(576, 256))
+        bb_layers2.append(nn.ReLU())
+        bb_layers2.append(nn.Dropout(0.5))
+        bb_layers2.append(nn.Linear(256, 128))
+        bb_layers2.append(nn.ReLU())
+        self.backbone.append(nn.Sequential(*bb_layers2))
 
     #adding early exits/branches
     def _build_exits(self):
@@ -338,6 +339,15 @@ class B_Alexnet_cifar(B_Lenet):
             nn.Linear(288,10), #, bias=False),
             )
         self.exits.append(ee1)
+
+        ee2 = nn.Sequential(
+            nn.MaxPool2d(3,stride=2,ceil_mode=False),
+            nn.Conv2d(96, 32, kernel_size=3,stride=1,padding=1),
+            nn.MaxPool2d(3,stride=2,ceil_mode=False),
+            nn.Flatten(),
+            nn.Linear(32,10),
+            )
+        self.exits.append(ee2)
 
         #final exit
         eeF = nn.Sequential(

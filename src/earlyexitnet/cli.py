@@ -38,7 +38,11 @@ def get_exits(model_str):
 
 def test_only(args):
     model = get_model(args.model_name)
-    exits = get_exits(args.model_name)
+    # get number of exits
+    if hasattr(model,'exit_num'):
+        exits=model.exit_num
+    else:
+        exits=get_exits(args.model_name)
     print("Model:", args.model_name)
     #set loss function
     loss_f = nn.CrossEntropyLoss() # combines log softmax and negative log likelihood
@@ -80,8 +84,15 @@ def test(datacoll,model,exits,loss_f,
     # set up test class then write results
     test_dl = datacoll.get_test_dl()
     if exits>1:
-        top1_thr = [args.top1_threshold, 0]
-        entr_thr = [args.entr_threshold, 1000000]
+        if len(args.top1_threshold)+1 != exits or \
+            len(args.entr_threshold)+1 != exits:
+                raise ValueError(f"Not enough arguments for threshold. Expecting {exits-1}")
+        # Adding final exit thr - must exit here so tiny/huge depending on criteria
+        top1_thr = args.top1_threshold
+        top1_thr.append(0)
+        entr_thr = args.entr_threshold
+        entr_thr.append(1000000)
+        # Creating Tester object
         net_test = Tester(model,test_dl,loss_f,exits,
                 top1_thr,entr_thr)
     else:
@@ -276,8 +287,9 @@ def main():
     #threshold inputs for TESTING
     parser.add_argument('-bste','--batch_size_test',type=int,default=1,
                         help='batch size for the testing of the network')
-    parser.add_argument('-t1','--top1_threshold',type=float,required=False)
-    parser.add_argument('-entr','--entr_threshold',type=float,required=False)
+    #threshold inputs for testing, 1 or more args - user should know model
+    parser.add_argument('-t1','--top1_threshold', nargs='+',type=float,required=False)
+    parser.add_argument('-entr','--entr_threshold', nargs='+',type=float,required=False)
 
     #TODO arguments to add
         #training loss function

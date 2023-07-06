@@ -16,6 +16,8 @@ class BrnFirstExit(nn.Module):
             nn.Flatten(),
             nn.Linear(640, 10)#, bias=False)
         )
+        #NOTE early and late exits
+        self.exit_num=1
 
     def forward(self, x):
         y = [self.first_exit(x)] #NOTE put in list to reuse training code
@@ -43,6 +45,8 @@ class BrnSecondExit(nn.Module):
             nn.Linear(720, 84),#, bias=False),
             nn.Linear(84,10)#, bias=False)
         )
+        #NOTE early and late exits
+        self.exit_num=1
 
     def forward(self, x):
         y = [self.second_exit(x)] #NOTE put in list to reuse training code
@@ -61,6 +65,8 @@ class BrnFirstExit_se(nn.Module):
             nn.Flatten(),
             nn.Linear(1280, 10)#, bias=False)
         )
+        #NOTE early and late exits
+        self.exit_num=1
 
     def forward(self, x):
         y = [self.first_exit(x)] #NOTE put in list to reuse training code
@@ -87,6 +93,8 @@ class Backbone_se(nn.Module):
             #nn.Linear(1000, 84), #bias=False
             nn.Linear(720, 10)
         )
+        #NOTE early and late exits
+        self.exit_num=1
 
     def forward(self, x):
         y = [self.second_exit(x)] #NOTE put in list to reuse training code
@@ -106,6 +114,8 @@ class Testnet(nn.Module):
             nn.Flatten(),
             nn.Linear(5120, 10)#, bias=False)
         )
+        #NOTE early and late exits
+        self.exit_num=1
 
     def forward(self, x):
         y = [self.testnet(x)]#self.conv1(x)
@@ -163,6 +173,8 @@ class Backbone_Alex(nn.Module):
             #dropout
             nn.Linear(128, 10)
         )
+        #NOTE early and late exits
+        self.exit_num=1
 
     def forward(self, x):
         #NOTE put in list to reuse training code
@@ -193,6 +205,8 @@ class TW_BB_SmallCNN(nn.Module):
                 nn.Linear(200,200),
                 nn.ReLU(True),
                 nn.Linear(200,10))
+        #NOTE early and late exits
+        self.exit_num=1
 
     def forward(self, x):
         return [self.bb(x)]
@@ -240,6 +254,8 @@ class BasicBlock(nn.Module):
 class SDN_BB_ResNet(nn.Module):
     def __init__(self):
         super(SDN_BB_ResNet, self).__init__()
+        #NOTE early and late exits
+        self.exit_num=1
 
         params = {}
 
