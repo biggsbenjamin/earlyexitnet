@@ -17,6 +17,8 @@ from earlyexitnet.tools import MNISTDataColl,CIFAR10DataColl,load_model
 
 # import nn for loss function
 import torch.nn as nn
+# torch for cuda check
+import torch
 # general imports
 import os
 from datetime import datetime as dt
@@ -63,6 +65,18 @@ def test_only(args):
 
 def test(datacoll,model,exits,loss_f,
          save_path,notes_path,args):
+    # check if there are thresholds provided
+    if args.top1_threshold is None and \
+            args.entr_threshold is None:
+        # no thresholds provided, skip testing
+        print("WARNING: No Thresholds provided, skipping testing.")
+        return
+    elif args.top1_threshold is None:
+        # set useless threshold
+        args.top1_threshold=0
+    elif args.entr_threshold is None:
+        # set useless threshold
+        args.entr_threshold=1000000
     # set up test class then write results
     test_dl = datacoll.get_test_dl()
     if exits>1:
@@ -121,7 +135,15 @@ def train_n_test(args):
     model = get_model(args.model_name)
     exits = get_exits(args.model_name)
     print("Model done:", args.model_name)
-    #set loss function - og bn used "softmax_cross_entropy" unclear if this is the same
+    # Device setup
+    if torch.cuda.is_available() and args.gpu_target is not None:
+        device = torch.device(f"cuda:{args.gpu_target}")
+    else:
+        device = torch.device("cpu")
+    print("Device:", device)
+    num_workers = 1 if args.num_workers is None else args.num_workers
+    print("Number of workers: {num_workers}")
+    #set loss function
     loss_f = nn.CrossEntropyLoss() # combines log softmax and negative log likelihood
     print("Loss function set")
     print("Training new network")
@@ -136,11 +158,11 @@ def train_n_test(args):
     if args.dataset == 'mnist':
         datacoll = MNISTDataColl(batch_size_train=batch_size_train,
                 batch_size_test=batch_size_test,normalise=normalise,
-                v_split=validation_split)
+                v_split=validation_split,num_workers=num_workers)
     elif args.dataset == 'cifar10':
         datacoll = CIFAR10DataColl(batch_size_train=batch_size_train,
                 batch_size_test=batch_size_test,normalise=normalise,
-                v_split=validation_split)
+                v_split=validation_split,num_workers=num_workers)
     else:
         raise NameError("Dataset not supported, check name:",args.dataset)
     train_dl = datacoll.get_train_dl()
@@ -149,6 +171,11 @@ def train_n_test(args):
 
     #start training loop for epochs - at some point add recording points here
     path_str = 'outputs/'
+    pretrain_backbone=True
+    if args.bb_epochs == 0:
+        # if no model provided, joint from scratch
+        pretrain_backbone=False
+
     print("backbone epochs: {} joint epochs: {}".format(args.bb_epochs, args.jt_epochs))
 
     # Set up training class
@@ -157,10 +184,12 @@ def train_n_test(args):
         path_str,loss_f=loss_f, exits=exits,
         backbone_epochs=args.bb_epochs,
         exit_epochs=args.ex_epochs,
-        joint_epochs=args.jt_epochs
+        joint_epochs=args.jt_epochs,
+        device=device,
+        pretrained_path=args.trained_model_path
     )
     if exits > 1:
-        best,last=net_trainer.train_joint(pretrain_backbone=True)
+        best,last=net_trainer.train_joint(pretrain_backbone=pretrain_backbone)
     else:
         ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
         intr_path = f'bb_only_time_{ts}'
@@ -237,6 +266,13 @@ def main():
             choices=['mnist','cifar10','cifar100'],
             required=False, default='mnist',
             help='select the dataset, default is mnist')
+
+    # choose the cuda device to target
+    parser.add_argument('-gpu','--gpu_target',type=int,required=False,
+            help="GPU acceleration target, int val for torch.device( cuda:[?] )")
+    parser.add_argument('-nw','--num_workers',type=int,required=False,
+            help="Number of workers for data loaders")
+
     #threshold inputs for TESTING
     parser.add_argument('-bste','--batch_size_test',type=int,default=1,
                         help='batch size for the testing of the network')

@@ -11,7 +11,8 @@ from earlyexitnet.models.Branchynet import \
     ConvPoolAc,B_Lenet,B_Lenet_fcn,B_Lenet_se, B_Lenet_cifar
 
 # importing non EE models
-from earlyexitnet.models.Lenet import Lenet
+# NOTE models that don't output a list (over exits) won't work
+#from earlyexitnet.models.Lenet import Lenet
 from earlyexitnet.models.Testnet import \
     Testnet, BrnFirstExit, BrnSecondExit, Backbone_se
 
@@ -40,6 +41,8 @@ def get_num_correct(preds, labels):
 def get_model(model_str):
     #set up the model specified in args
     if model_str == 'lenet':
+        # FIXME
+        raise NameError("Training this model not supported")
         model = Lenet()
     elif model_str == 'testnet':
         model = Testnet()
@@ -69,7 +72,9 @@ class Trainer:
     def __init__(self, model, train_dl, valid_dl, batch_size, save_path,
                  loss_f=nn.CrossEntropyLoss(), exits=1,
                  backbone_epochs=50, exit_epochs=50,joint_epochs=100,
-                 #pretrain_backbone=True, dat_norm=False):
+                 device=None,
+                 pretrained_path=None,
+                 #dat_norm=False):
                  ):
         # assign nn model to train
         self.model=model
@@ -91,6 +96,11 @@ class Trainer:
         self.exit_epochs = exit_epochs
         # epochs to train exits and bb jointly
         self.joint_epochs = joint_epochs
+        # device to train on
+        self.device=device
+        # path to pretrained model
+        self.pretrained_path=pretrained_path
+        # TODO different operations if model is full or just bb
 
         self.ee_flag=False
         if self.exits > 1:
@@ -123,8 +133,78 @@ class Trainer:
         self.valid_accu_trk = AccuTracker(
             self.valid_dl.batch_size,bins=e_num)
 
-    def _train_ee(self, training_exits, epochs, opt, internal_folder='',
-                  prefix='blank_prefix'):
+    def _train_loop_loss_ex(self,opt,results,yb):
+        # calculate loss, ba
+        raw_losses = [self.loss_f(res,yb) \
+                      for res in results]
+        losses = [weighting * raw_loss
+                    for weighting, raw_loss in \
+                  zip(self.model.exit_loss_weights,
+                      raw_losses)]
+        opt.zero_grad()
+        #backprop
+        for loss in losses[:-1]:
+            #ee losses need to keep graph
+            loss.backward(retain_graph=True)
+        #final loss, graph not required
+        losses[-1].backward()
+        opt.step()
+        #raw losses
+        self.train_loss_trk.add_loss(
+            [exit_loss.item() for \
+             exit_loss in raw_losses])
+        self.train_accu_trk.update_correct(
+            results,yb)
+
+    def _train_loop_loss_bb(self,opt,results,yb):
+        #TODO add backbone only method to brn class
+        loss = self.loss_f(results[-1], yb)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        # update trackers
+        self.train_loss_trk.add_loss(loss.item())
+        self.train_accu_trk.update_correct(
+            results[-1],yb)
+    def _val_loop_get_best_ex(self,val_loss_avg,val_accu_avg,savepoint):
+        el_total=0.0
+        bl_total=0.0
+        for exit_loss,best_loss,l_w in \
+                zip(val_loss_avg,
+                    self.best_val_loss["loss"],
+                    self.model.exit_loss_weights):
+            el_total+=exit_loss*l_w
+            bl_total+=best_loss*l_w
+        #selecting "best" network
+        if el_total < bl_total:
+            self.best_val_loss["loss"] = val_loss_avg
+            self.best_val_loss["savepoint"] = savepoint
+        # determining exit accuracy, current and best
+        ea_total=0.0
+        ba_total=0.0
+        for exit_accu, best_accu,l_w in \
+                zip(val_accu_avg,
+                    self.best_val_accu["accuracy"],
+                    self.model.exit_loss_weights):
+            ea_total+=exit_accu*l_w
+            ba_total+=best_accu*l_w
+        #selecting "best" network
+        if ea_total > ba_total:
+            self.best_val_accu["accuracy"]=val_accu_avg
+            self.best_val_accu["savepoint"]=savepoint
+    def _val_loop_get_best_bb(self,val_loss_avg,val_accu_avg,savepoint):
+        if val_loss_avg < self.best_val_loss["loss"][0]:
+            self.best_val_loss["loss"][0] = val_loss_avg
+            self.best_val_loss["savepoint"]=savepoint
+        if val_accu_avg > self.best_val_accu["accuracy"][0]:
+            self.best_val_accu["accuracy"][0] = val_accu_avg
+            self.best_val_accu["savepoint"] = savepoint
+
+    def _train_ee(self, training_exits, epochs, opt,
+            internal_folder='',prefix='blank_prefix',
+            loss_calc_f=None,validation_get_best_f=None
+            ):
+            # bb vs exit&jnt functions for loss, etc.
         # training exits bool
         if training_exits:
             e_num = self.exits
@@ -132,6 +212,11 @@ class Trainer:
         else:
             e_num = 1
             print(f"Training final exit")
+
+        # set device model - should be cpu as default
+        if self.device is None:
+            self.device = torch.device("cpu")
+        self.model.to(self.device)
 
         for epoch in range(epochs):
             self.model.train()
@@ -142,39 +227,10 @@ class Trainer:
 
             #training loop
             for xb, yb in self.train_dl:
+                xb, yb = xb.to(self.device), yb.to(self.device)
                 results = self.model(xb)
-
-                if training_exits:
-                    raw_losses = [self.loss_f(res,yb) \
-                                  for res in results]
-                    losses = [weighting * raw_loss
-                                for weighting, raw_loss in \
-                              zip(self.model.exit_loss_weights,
-                                  raw_losses)]
-                    opt.zero_grad()
-                    #backprop
-                    for loss in losses[:-1]:
-                        #ee losses need to keep graph
-                        loss.backward(retain_graph=True)
-                    #final loss, graph not required
-                    losses[-1].backward()
-                    opt.step()
-                    #raw losses
-                    self.train_loss_trk.add_loss(
-                        [exit_loss.item() for \
-                         exit_loss in raw_losses])
-                    self.train_accu_trk.update_correct(
-                        results,yb)
-                else:
-                    #TODO add backbone only method to brn class
-                    loss = self.loss_f(results[-1], yb)
-                    opt.zero_grad()
-                    loss.backward()
-                    opt.step()
-                    # update trackers
-                    self.train_loss_trk.add_loss(loss.item())
-                    self.train_accu_trk.update_correct(
-                        results[-1],yb)
+                # calculate and back prop loss for exit(s)
+                loss_calc_f(opt,results,yb)
             # update training loss and accuracy averages
             tr_loss_avg = self.train_loss_trk.get_avg(
                 return_list=True)
@@ -183,10 +239,12 @@ class Trainer:
             if not training_exits:
                 tr_loss_avg = tr_loss_avg[-1]
                 t1acc = t1acc[-1]
+
             #### validation loop ####
             self.model.eval()
             with torch.no_grad():
                 for xb,yb in self.valid_dl:
+                    xb, yb = xb.to(self.device), yb.to(self.device)
                     res_v = self.model(xb)
                     if training_exits:
                         self.valid_loss_trk.add_loss(
@@ -223,40 +281,10 @@ raw v loss:{} v accu:{}""".format(tr_loss_avg,
                 taccu=t1acc,vaccu=val_accu_avg)
 
             # determining exit loss, current and best
-            if training_exits:
-                el_total=0.0
-                bl_total=0.0
-                for exit_loss,best_loss,l_w in \
-                        zip(val_loss_avg,
-                            self.best_val_loss["loss"],
-                            self.model.exit_loss_weights):
-                    el_total+=exit_loss*l_w
-                    bl_total+=best_loss*l_w
-                #selecting "best" network
-                if el_total < bl_total:
-                    self.best_val_loss["loss"] = val_loss_avg
-                    self.best_val_loss["savepoint"] = savepoint
+            validation_get_best_f(val_loss_avg,val_accu_avg,savepoint)
+            # TODO log tr and vl data against epoch to file
+            # print to some file, csv or otherwise
 
-                # determining exit accuracy, current and best
-                ea_total=0.0
-                ba_total=0.0
-                for exit_accu, best_accu,l_w in \
-                        zip(val_accu_avg,
-                            self.best_val_accu["accuracy"],
-                            self.model.exit_loss_weights):
-                    ea_total+=exit_accu*l_w
-                    ba_total+=best_accu*l_w
-                #selecting "best" network
-                if ea_total > ba_total:
-                    self.best_val_accu["accuracy"]=val_accu_avg
-                    self.best_val_accu["savepoint"]=savepoint
-            else: # NOT training exits
-                if val_loss_avg < self.best_val_loss["loss"][0]:
-                    self.best_val_loss["loss"][0] = val_loss_avg
-                    self.best_val_loss["savepoint"]=savepoint
-                if val_accu_avg > self.best_val_accu["accuracy"][0]:
-                    self.best_val_accu["accuracy"][0] = val_accu_avg
-                    self.best_val_accu["savepoint"] = savepoint
         # final print - TODO log this
         print("BEST* VAL LOSS: ",self.best_val_loss["loss"],
               " for epoch: ",self.best_val_loss["savepoint"])
@@ -289,7 +317,10 @@ raw v loss:{} v accu:{}""".format(tr_loss_avg,
             training_exits=False,
             epochs=self.backbone_epochs,
             opt=opt,internal_folder=internal_folder,
-            prefix='backbone')
+            prefix='backbone',
+            loss_calc_f=self._train_loop_loss_bb,
+            validation_get_best_f=self._val_loop_get_best_bb
+            )
         return best_bb_pth, last_pth
 
     def train_exits(self):
@@ -304,22 +335,29 @@ raw v loss:{} v accu:{}""".format(tr_loss_avg,
 
     def train_joint(self, pretrain_backbone=True):
         timestamp = dt.now().strftime("%Y-%m-%d_%H%M%S")
-        if pretrain_backbone:
-            print("PRETRAINING BACKBONE FROM SCRATCH")
-            folder_path = 'pre_Trn_bb_' + timestamp
-            # Training backbone!
-            best_bb_path,_ = self.train_backbone(
-                internal_folder=folder_path)
-            #train the rest...
-            print("LOADING BEST BACKBONE:",best_bb_path)
-            load_model(self.model, best_bb_path)
-            print("JOINT TRAINING WITH PRETRAINED BACKBONE")
-            prefix = 'pretrn-joint'
-        else:
-            #jointly trains backbone and exits from scratch
-            print("JOINT TRAINING FROM SCRATCH")
-            folder_path = 'jnt_fr_scrcth' + timestamp
-            prefix = 'joint'
+        if self.pretrained_path is None:
+            if pretrain_backbone:
+                print("PRETRAINING BACKBONE FROM SCRATCH")
+                folder_path = 'pre_Trn_bb_' + timestamp
+                # Training backbone!
+                best_bb_path,_ = self.train_backbone(
+                    internal_folder=folder_path)
+                #train the rest...
+                print("LOADING BEST BACKBONE:",best_bb_path)
+                load_model(self.model, best_bb_path)
+                print("JOINT TRAINING WITH PRETRAINED BACKBONE")
+                prefix = 'pretrn-joint'
+            else:
+                #jointly trains backbone and exits from scratch
+                print("JOINT TRAINING FROM SCRATCH")
+                folder_path = 'jnt_fr_scrcth' + timestamp
+                prefix = 'joint'
+        else: # pretrained model
+            # NOTE assuming just backbone trained
+            load_model(self.model, self.pretrained_path)
+            print("JOINT TRAINING USING EXISTING BB")
+            folder_path = 'jnt_fr_exstng' + timestamp
+            prefix = 'bbexst-joint'
         #set up the joint optimiser - NOTE branchynet default
         lr = 0.001 #Adam algo - step size alpha=0.001
         exp_decay_rates = [0.99, 0.999]
@@ -335,7 +373,10 @@ raw v loss:{} v accu:{}""".format(tr_loss_avg,
             training_exits=True,
             epochs=self.joint_epochs,
             opt=opt, internal_folder=folder_path,
-            prefix=prefix)
+            prefix=prefix,
+            loss_calc_f=self._train_loop_loss_ex,
+            validation_get_best_f=self._val_loop_get_best_ex
+            )
         return best_bb_pth, last_pth
 
 ### OLD CODE - REFACTORING ###

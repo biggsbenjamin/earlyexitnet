@@ -22,7 +22,7 @@ from datetime import datetime as dt
 
 class Tester:
     def __init__(self,model,test_dl,loss_f=nn.CrossEntropyLoss(),exits=2,
-            top1acc_thresholds=[],entropy_thresholds=[]):
+            top1acc_thresholds=[],entropy_thresholds=[],device=None):
         self.model=model
         self.test_dl=test_dl
         self.loss_f=loss_f
@@ -30,6 +30,10 @@ class Tester:
         self.sample_total = len(test_dl)
         self.top1acc_thresholds = top1acc_thresholds
         self.entropy_thresholds = entropy_thresholds
+        if device is None or not torch.cuda.is_available():
+            self.device = torch.device("cpu")
+        else:
+            self.device = device
 
         if exits > 1:
             #TODO make thresholds a more flexible param
@@ -59,8 +63,10 @@ class Tester:
 
     def _test_multi_exit(self):
         self.model.eval()
+        self.model.to(self.device)
         with torch.no_grad():
             for xb,yb in self.test_dl:
+                xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
                 self.accu_track_totl.update_correct(res,yb)
                 for i,(exit,thr) in enumerate(
@@ -84,15 +90,19 @@ class Tester:
 
     def _test_single_exit(self):
         self.model.eval()
+        self.model.to(self.device)
         with torch.no_grad():
             for xb,yb in self.test_dl:
+                xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
                 self.accu_track_totl.update_correct(res,yb)
 
     def debug_values(self):
         self.model.eval()
+        self.model.to(self.device)
         with torch.no_grad():
             for xb,yb in test_dl:
+                xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
                 for i,exit in enumerate(res):
                     #print("raw exit {}: {}".format(i, exit))
