@@ -16,14 +16,16 @@ classifiers = [
 ]
 dependencies = [
     "onnx==1.8.1",
+    "protobuf==3.20",
     "onnxruntime==1.7.0",
     "onnxoptimizer==0.2.6",
     "torch==1.13.1",
     "torchvision>=0.8.2",
     "onnx-simplifier>=0.3.5",
-    "numpy>=1.19.2",
+    "numpy==1.19.2",
     "scipy>=1.2.1",
     "matplotlib",
+    "onnx2pytorch"
 ]
 
 [project.optional-dependencies]

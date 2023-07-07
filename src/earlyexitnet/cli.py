@@ -13,7 +13,8 @@ from earlyexitnet.training_tools.train import Trainer,get_model
 from earlyexitnet.testing_tools.test import Tester
 
 # import dataloaders from tools
-from earlyexitnet.tools import MNISTDataColl,CIFAR10DataColl,load_model
+from earlyexitnet.tools import \
+    MNISTDataColl,CIFAR10DataColl,load_model,path_check
 
 # import nn for loss function
 import torch.nn as nn
@@ -24,6 +25,7 @@ import os
 from datetime import datetime as dt
 
 def get_exits(model_str):
+    # NOTE only used if there is no exit num constant
     # set number of exits
     if model_str in ['lenet','testnet','brnfirst',
                      'brnsecond','brnfirst_se','backbone_se']:
@@ -71,7 +73,8 @@ def test(datacoll,model,exits,loss_f,
          save_path,notes_path,args):
     # check if there are thresholds provided
     if args.top1_threshold is None and \
-            args.entr_threshold is None:
+            args.entr_threshold is None and \
+            exits > 1:
         # no thresholds provided, skip testing
         print("WARNING: No Thresholds provided, skipping testing.")
         return
@@ -144,7 +147,11 @@ Main training and testing function run from the cli
 def train_n_test(args):
     #set up the model specified in args
     model = get_model(args.model_name)
-    exits = get_exits(args.model_name)
+    # get number of exits
+    if hasattr(model,'exit_num'):
+        exits=model.exit_num
+    else:
+        exits=get_exits(args.model_name)
     print("Model done:", args.model_name)
     # Device setup
     if torch.cuda.is_available() and args.gpu_target is not None:
@@ -228,13 +235,6 @@ def train_n_test(args):
     #once trained, run it on the test data
     test(datacoll,net_trainer.model,exits,loss_f,save_path,notes_path,args)
 
-
-def path_check(string): #checks for valid path
-    if os.path.exists(string):
-        return string
-    else:
-        raise FileNotFoundError(string)
-
 """
 Main function that sorts out the CLI args and runs training and testing function.
 """
@@ -252,6 +252,7 @@ def main():
                         'brnsecond',
                         'backbone_se',
                         'b_lenet_cifar',
+                        'resnet8'
                         ],
             required=True, help='select the model name')
 

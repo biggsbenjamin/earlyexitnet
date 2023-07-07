@@ -15,6 +15,8 @@ from earlyexitnet.models.Branchynet import \
 #from earlyexitnet.models.Lenet import Lenet
 from earlyexitnet.models.Testnet import \
     Testnet, BrnFirstExit, BrnSecondExit, Backbone_se
+# Non ee model
+from earlyexitnet.models.ResNet8 import ResNet8
 
 # importing accu + loss trackers and dataloader classes
 from earlyexitnet.tools import LossTracker, AccuTracker
@@ -63,6 +65,8 @@ def get_model(model_str):
     elif model_str == 'b_lenet_cifar':
         model = B_Lenet_cifar()
         #print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
+    elif model_str == 'resnet8':
+        model = ResNet8()
     else:
         raise NameError("Model not supported, check name:",model_str)
     print("Model done:", model_str)

@@ -444,3 +444,15 @@ def exit_pc(ee_pc=0.70, bs=1024):
     for idx, sample in enumerate(hw_test):
         np.save(target_dir+('img{:05d}.npy'.format(idx)) ,sample)
     return
+
+
+################################
+######   Helpful Funcs   #######
+################################
+
+def path_check(string): #checks for valid path
+    if os.path.exists(string):
+        return string
+    else:
+        raise FileNotFoundError(string)
+
