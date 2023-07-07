@@ -1,0 +1,56 @@
+import torch
+
+import ctypes as ct
+from fxpmath import Fxp
+import numpy as np
+
+def quick_exp(val : float) -> float:
+  # convert to 16 bit fixed point
+  x = Fxp(val, signed=True, n_word=16, n_frac=8)
+  
+  # construct IEEE-754 32 floating point
+  # use the integer part of the number as the exponent
+  exp = (x.val >> 8) & 0xFF # extract integer val
+  exp += 127 # add bias
+  exp &= 0xFF # make sure it's only 8 bits
+  res = exp << 23 # move exp to be in the correct position
+  
+  # print(f"{res:032b}")
+  
+  res_float = ct.cast(ct.pointer(ct.c_uint32(res)), ct.POINTER(ct.c_float)).contents.value
+  return res_float
+  
+
+# take the final layer and a threshold and find out if branching can happen
+# def fast_softmax(final_layer: torch.Tensor, thresh: float) -> bool: 
+#   zs = final_layer.tolist()
+  
+#   for z in zs:
+    
+
+def main():
+  
+  print(quick_exp(-4))
+  
+  # y = 5.75
+  
+  # x = Fxp(y, signed=True, n_word=16, n_frac=8)
+  
+  # print(x.n_frac, x.n_int, x.upper, x.lower)
+  # print(x.get_val(), type(x.get_val()), x.bin(), type(x.bin()))
+  # print(x.info(verbose=3))
+  # bits1 = ct.cast(ct.pointer(ct.c_float(x.get_val())), ct.POINTER(ct.c_uint32)).contents.value
+  # bits2 = ct.cast(ct.pointer(ct.c_float(y)), ct.POINTER(ct.c_uint32)).contents.value
+
+  # print(f"{bits1:032b}")
+  # print(f"{bits2:032b}")
+  # print(x.val, type(x.val), f"{x.val:032b}")
+  
+  # print(np.binary_repr(int(5.75), width=16), type(np.binary_repr(int(5.75), width=16)))
+
+  # tensor([[ -9.4018, -22.9105,  -3.9112,   1.6748,  -6.1232,  -4.9361, -18.7000,
+  #          2.2737,   1.3246,   4.0967]], device='cuda:0'), tensor([[-20.4055, -46.4818, -14.8476,  22.9752,  -5.0832,  -2.9427, -39.8003,
+  #          5.7668,  26.4024,  32.4166]], device='cuda:0')]
+
+if __name__ == "__main__":
+  main()

@@ -45,9 +45,11 @@ class Tester:
             #samples exited
             self.exit_track_top1 = Tracker(test_dl.batch_size,exits,self.sample_total)
             self.exit_track_entr = Tracker(test_dl.batch_size,exits,self.sample_total)
+            self.exit_track_fast = Tracker(test_dl.batch_size,exits,self.sample_total)
             #individual accuracy over samples exited
             self.accu_track_top1 = AccuTracker(test_dl.batch_size,exits)
             self.accu_track_entr = AccuTracker(test_dl.batch_size,exits)
+            self.accu_track_fast = AccuTracker(test_dl.batch_size,exits)
 
         #total exit accuracy over the test data
         self.accu_track_totl = AccuTracker(
@@ -82,6 +84,18 @@ class Tester:
                 self.accu_track_top1.update_correct(exit,correct_results,bin_index=i)
                 break
 
+    def _fast_softmax_comparison(self, results : list[list[float]], correct_results : list[float]):
+        for i,(exit,thr) in enumerate(zip(results,self.top1acc_thresholds)):
+        
+            
+            
+            
+            if sftmx_max > thr:
+                #print("top1 exited at exit {}".format(i))
+                self.exit_track_fast.add_val(1,i)
+                self.accu_track_fast.update_correct(exit,correct_results,bin_index=i)
+                break
+
     def _test_multi_exit(self):
         self.model.eval()
         self.model.to(self.device)
@@ -93,25 +107,6 @@ class Tester:
                 
                 self._softmax_comparison(res,yb)
                 self._entropy_comparison(res,yb)
-                
-                # for i,(exit,thr) in enumerate(
-                #         zip(res,self.top1acc_thresholds)):
-                #     ### NOTE DEFINING TOP1 of SOFTMAX DECISION
-                #     softmax = nn.functional.softmax(exit,dim=-1)
-                #     sftmx_max = torch.max(softmax)
-                #     if sftmx_max > thr:
-                #         #print("top1 exited at exit {}".format(i))
-                #         self.exit_track_top1.add_val(1,i)
-                #         self.accu_track_top1.update_correct(exit,yb,bin_index=i)
-                #         break
-                # for i,(exit,thr) in enumerate(zip(res,self.entropy_thresholds)):
-                #     softmax = nn.functional.softmax(exit,dim=-1)
-                #     entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
-                #     if entr < thr:
-                #         #print("entr exited at exit {}".format(i))
-                #         self.exit_track_entr.add_val(1,i)
-                #         self.accu_track_entr.update_correct(exit,yb,bin_index=i)
-                #         break
 
     def _test_single_exit(self):
         self.model.eval()
