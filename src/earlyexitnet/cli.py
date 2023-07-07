@@ -117,13 +117,18 @@ def test(datacoll,model,exits,loss_f,
     t1_tot_acc = net_test.top1_accu_tot
     ent_tot_acc = net_test.entr_accu_tot
     full_exit_accu = net_test.full_exit_accu
+    
+    fast_pc = net_test.fast_pc
+    fast_accu = net_test.fast_accu
+    fast_tot_acc = net_test.fast_accu_tot
+    
     #get percentage exits and avg accuracies, add some timing etc.
     print("top1 thrs: {},  entropy thrs: {}".format(top1_thr, entr_thr))
-    print("top1 exit %s {},  entropy exit %s {}".format(top1_pc, entropy_pc))
+    print("top1 exit %s {},  entropy exit %s {},  fast exit %s {}".format(top1_pc, entropy_pc, fast_pc))
     print("Accuracy over exited samples:")
-    print("top1 exit acc % {}, entropy exit acc % {}".format(top1acc, entracc))
+    print("top1 exit acc % {}, entropy exit acc % {}, fast exit acc % {}".format(top1acc, entracc, fast_accu))
     print("Accuracy over network:")
-    print("top1 acc % {}, entr acc % {}".format(t1_tot_acc,ent_tot_acc))
+    print("top1 acc % {}, entr acc % {}, fast acc % {}".format(t1_tot_acc,ent_tot_acc,fast_tot_acc))
     print("Accuracy of the individual exits over full set: {}".format(full_exit_accu))
 
     ts = dt.now().strftime("%Y-%m-%d_%H%M%S")

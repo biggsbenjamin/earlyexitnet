@@ -3,6 +3,9 @@ Class for testing early exit and normal CNNs.
 Includes requires accuracy and loss trackers from tools
 """
 
+# import custom funcions to simulate hardware
+import earlyexitnet.testing_tools.hw_sim as hw_sim
+
 # importing trackers for loss + accuracy, and generic tracker for exit distribution
 from earlyexitnet.tools import Tracker, LossTracker, AccuTracker
 
@@ -57,11 +60,15 @@ class Tester:
 
         self.top1_pc = None # % exit for top1 confidence
         self.entr_pc = None # % exit for entropy confidence
+        self.fast_pc = None
         self.top1_accu = None #accuracy of exit over exited samples
         self.entr_accu = None #accuracy of exit over exited samples
+        self.fast_accu = None
         self.full_exit_accu = None #accuracy of the exits over all samples
         self.top1_accu_tot = None #total accuracy of network given exit strat
         self.entr_accu_tot = None #total accuracy of network given exit strat
+        self.fast_accu_tot = None
+
 
     def _entropy_comparison(self, results : list[list[float]], correct_results : list[float]):
         for i,(exit,thr) in enumerate(zip(results,self.entropy_thresholds)):
@@ -87,8 +94,8 @@ class Tester:
     def _fast_softmax_comparison(self, results : list[list[float]], correct_results : list[float]):
         for i,(exit,thr) in enumerate(zip(results,self.top1acc_thresholds)):
         
-            
-            
+            softmax = hw_sim.fast_softmax(exit)
+            sftmx_max = max(softmax)           
             
             if sftmx_max > thr:
                 #print("top1 exited at exit {}".format(i))
@@ -107,6 +114,7 @@ class Tester:
                 
                 self._softmax_comparison(res,yb)
                 self._entropy_comparison(res,yb)
+                self._fast_softmax_comparison(res,yb)
 
     def _test_single_exit(self):
         self.model.eval()
@@ -140,10 +148,13 @@ class Tester:
             self._test_multi_exit()
             self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
             self.entr_pc = self.exit_track_entr.get_avg(return_list=True)
+            self.fast_pc = self.exit_track_fast.get_avg(return_list=True)
             self.top1_accu = self.accu_track_top1.get_accu(return_list=True)
             self.entr_accu = self.accu_track_entr.get_accu(return_list=True)
+            self.entr_fast = self.accu_track_fast.get_accu(return_list=True)
             self.top1_accu_tot = np.sum(self.accu_track_top1.val_bins)/self.sample_total
             self.entr_accu_tot = np.sum(self.accu_track_entr.val_bins)/self.sample_total
+            self.entr_accu_fast = np.sum(self.accu_track_fast.val_bins)/self.sample_total
         else:
             self._test_single_exit()
         #accuracy of each exit over FULL data set
