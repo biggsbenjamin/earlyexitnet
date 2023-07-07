@@ -69,6 +69,13 @@ def test_only(args):
 
 def test(datacoll,model,exits,loss_f,
          save_path,notes_path,args):
+    # Device setup
+    if torch.cuda.is_available() and args.gpu_target is not None:
+        device = torch.device(f"cuda:{args.gpu_target}")
+    else:
+        device = torch.device("cpu")
+    print("Device:", device)
+    
     # check if there are thresholds provided
     if args.top1_threshold is None and \
             args.entr_threshold is None:
@@ -94,9 +101,9 @@ def test(datacoll,model,exits,loss_f,
         entr_thr.append(1000000)
         # Creating Tester object
         net_test = Tester(model,test_dl,loss_f,exits,
-                top1_thr,entr_thr)
+                top1_thr,entr_thr,device)
     else:
-        net_test = Tester(model,test_dl,loss_f,exits)
+        net_test = Tester(model,test_dl,loss_f,exits,device)
 
     top1_thr = net_test.top1acc_thresholds
     entr_thr = net_test.entropy_thresholds

@@ -11,6 +11,8 @@ net_graph.jpg.pdf
 **/old/**
 *.npy
 
+**/data/
+
 build/
 .eggs/
 *.egg-info/
