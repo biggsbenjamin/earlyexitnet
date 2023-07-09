@@ -5,8 +5,15 @@ class BasicBlock(nn.Module):
         super(BasicBlock, self).__init__()
         layers = nn.ModuleList()
         conv_layer = []
-        c0 = nn.Conv2d(in_channels, out_channels,
-                  kernel_size=3, stride=stride, padding=1, bias=True)
+
+        # manually matching padding
+        if stride != 1:
+            c0 = nn.Conv2d(in_channels, out_channels,
+                      kernel_size=3, stride=stride, padding=0, bias=True)
+            conv_layer.append(nn.ZeroPad2d((0,1,0,1)))
+        else:
+            c0 = nn.Conv2d(in_channels, out_channels,
+                      kernel_size=3, stride=stride, padding=1, bias=True)
         conv_layer.append(c0)
         conv_layer.append(nn.ReLU(inplace=True))
 

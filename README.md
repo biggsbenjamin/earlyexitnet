@@ -33,6 +33,8 @@ For Ubuntu this can be done with:
 
 Then, re-run `pip install .`
 
+> **Note** Issues with pip failing may be solved by `conda install [package]=[version]` specified in the `pyproject.toml`
+
 ### Troubleshooting
 
 For other Distros you may need a more recent version.

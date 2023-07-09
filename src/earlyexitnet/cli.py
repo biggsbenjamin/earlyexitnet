@@ -57,7 +57,7 @@ def test_only(args):
     if args.dataset == 'mnist':
         datacoll = MNISTDataColl(batch_size_test=batch_size_test)
     elif args.dataset == 'cifar10':
-        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test)
+        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,no_scaling=args.no_scaling)
     else:
         raise NameError("Dataset not supported, check name:",
                         args.dataset)
@@ -160,7 +160,7 @@ def train_n_test(args):
         device = torch.device("cpu")
     print("Device:", device)
     num_workers = 1 if args.num_workers is None else args.num_workers
-    print("Number of workers: {num_workers}")
+    print(f"Number of workers: {num_workers}")
     #set loss function
     loss_f = nn.CrossEntropyLoss() # combines log softmax and negative log likelihood
     print("Loss function set")
@@ -180,7 +180,8 @@ def train_n_test(args):
     elif args.dataset == 'cifar10':
         datacoll = CIFAR10DataColl(batch_size_train=batch_size_train,
                 batch_size_test=batch_size_test,normalise=normalise,
-                v_split=validation_split,num_workers=num_workers)
+                v_split=validation_split,num_workers=num_workers,
+                no_scaling=args.no_scaling)
     else:
         raise NameError("Dataset not supported, check name:",args.dataset)
     train_dl = datacoll.get_train_dl()
@@ -278,6 +279,8 @@ def main():
             choices=['mnist','cifar10','cifar100'],
             required=False, default='mnist',
             help='select the dataset, default is mnist')
+    parser.add_argument('--no_scaling',action='store_true',
+                        help='Prevents datqa being scaled to between 0,1')
 
     # choose the cuda device to target
     parser.add_argument('-gpu','--gpu_target',type=int,required=False,

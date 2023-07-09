@@ -21,7 +21,9 @@ class DataColl:
             normalise=False,
             k_cv=None,
             v_split=None,
-            num_workers=1
+            num_workers=1,
+            shuffle=True,
+            no_scaling=False
             ):
         self.batch_size_train = batch_size_train
         self.batch_size_test = batch_size_test
@@ -38,6 +40,11 @@ class DataColl:
         assert ((k_cv is None) or (v_split is None)), "only one V type, or none at all"
         self.has_valid = True if v_split is not None or k_cv is not None else False
         self.single_split = True if v_split is not None else False
+
+        self.shuffle=shuffle
+        # don't scale the values
+        # TODO apply this to other transform compositions
+        self.no_scaling=no_scaling
 
         self._load_sets()
 
@@ -94,17 +101,17 @@ class DataColl:
             self.gen_train()
             self.valid_dl = None #reset valid dl in case force not called here
             self.train_dl = DataLoader(self.train_set, batch_size=self.batch_size_train,
-                        drop_last=True, shuffle=True, num_workers=self.num_workers)
+                        drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
         else:
             if self.train_set is None:
                 self.gen_train()
             elif self.train_dl is None:
                 if self.single_split:
                     self.train_dl = DataLoader(self.train_set, batch_size=self.batch_size_train,
-                            drop_last=True, shuffle=True, num_workers=self.num_workers)
+                            drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
                 else:
                     self.train_dl = DataLoader(self.full_train_set, batch_size=self.
-                            batch_size_train,drop_last=True, shuffle=True,
+                            batch_size_train,drop_last=True, shuffle=self.shuffle,
                             num_workers=self.num_workers)
         #returns training set
         return self.train_dl
@@ -118,7 +125,7 @@ class DataColl:
             self.gen_valid()
         elif self.valid_dl is None:
             self.valid_dl = DataLoader(self.valid_set, batch_size=self.batch_size_train,
-                    drop_last=True, shuffle=True, num_workers=self.num_workers)
+                    drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
         #returns validation split
         return self.valid_dl
 
@@ -130,7 +137,7 @@ class DataColl:
         self.gen_test() #NOTE only assertion for now
         if self.test_dl is None:
             self.test_dl = DataLoader(self.full_test_set, batch_size=self.batch_size_test,
-                    drop_last=True, shuffle=True, num_workers=self.num_workers)
+                    drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
         return self.test_dl
 
 class MNISTDataColl(DataColl):
@@ -150,6 +157,9 @@ class CIFAR10DataColl(DataColl):
         #child version of function, CIFAR10 specific
         #standard transform for CIFAR10
         self.tfs = transforms.Compose([transforms.ToTensor()])
+        if self.no_scaling:
+            custom_trfm = transforms.Lambda(lambda x: x*255)
+            self.tfs = transforms.Compose([transforms.ToTensor(), custom_trfm])
         #full training set, no normalisation
         self.full_train_set = torchvision.datasets.CIFAR10('../data/cifar10',
             download=True, train=True, transform=self.tfs)
