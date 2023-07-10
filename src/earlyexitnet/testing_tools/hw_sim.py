@@ -22,7 +22,7 @@ def quick_exp(val : float) -> float:
   
 
 # take the final layer and a threshold and find out if branching can happen
-def fast_softmax(final_layer: torch.Tensor) -> bool: 
+def base2_softmax(final_layer: torch.Tensor) -> bool: 
   # import pdb;pdb.set_trace()
   zs = final_layer.squeeze().tolist()
   
@@ -43,7 +43,7 @@ def main():
   
   test = torch.tensor([ -9.4018, -22.9105,  -3.9112,   1.6748,  -6.1232,  -4.9361, -18.7000, 2.2737,   1.3246,   4.0967])
   
-  print(fast_softmax(test))
+  print(base2_softmax(test))
   print(torch.softmax(test,dim=-1))
   # y = 5.75
   

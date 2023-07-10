@@ -1,0 +1,30 @@
+
+#######################################
+
+Testing results: for b_lenet_se @ 2023-07-10_161506
+  on dataset mnist
+Test sample size: 10000
+top1 thrs: [0.75, 0],  entropy thrs: [0.01, 1000000]
+top1 exit %s [0.9819, 0.0181], entropy exit %s [0.7585, 0.2415]
+best* model ./trained_models/b_lenet_se.pth
+Accuracy over exited samples:
+top1 exit acc % [0.9932783379162847, 0.7513812154696132], entropy exit acc % [0.9994726433750823, 0.9544513457556936]
+Accuracy over EE network:
+top1 acc % 0.9889, entr acc % 0.9886
+Accuracy of the individual exits over full set: [0.9864, 0.9884]
+run notes example
+
+#######################################
+
+Testing results: for b_lenet_se @ 2023-07-10_162423
+  on dataset mnist
+Test sample size: 10000
+top1 thrs: [0.75, 0],  entropy thrs: [0.01, 1000000]
+top1 exit %s [0.9819, 0.0181], entropy exit %s [0.7585, 0.2415]
+best* model ./trained_models/b_lenet_se.pth
+Accuracy over exited samples:
+top1 exit acc % [0.9932783379162847, 0.7513812154696132], entropy exit acc % [0.9994726433750823, 0.9544513457556936]
+Accuracy over EE network:
+top1 acc % 0.9889, entr acc % 0.9886
+Accuracy of the individual exits over full set: [0.9864, 0.9884]
+run notes example

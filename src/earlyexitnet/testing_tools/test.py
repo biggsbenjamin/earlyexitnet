@@ -151,10 +151,10 @@ class Tester:
             self.fast_pc = self.exit_track_fast.get_avg(return_list=True)
             self.top1_accu = self.accu_track_top1.get_accu(return_list=True)
             self.entr_accu = self.accu_track_entr.get_accu(return_list=True)
-            self.entr_fast = self.accu_track_fast.get_accu(return_list=True)
+            self.fast_accu = self.accu_track_fast.get_accu(return_list=True)
             self.top1_accu_tot = np.sum(self.accu_track_top1.val_bins)/self.sample_total
             self.entr_accu_tot = np.sum(self.accu_track_entr.val_bins)/self.sample_total
-            self.entr_accu_fast = np.sum(self.accu_track_fast.val_bins)/self.sample_total
+            self.fast_accu_tot = np.sum(self.accu_track_fast.val_bins)/self.sample_total
         else:
             self._test_single_exit()
         #accuracy of each exit over FULL data set

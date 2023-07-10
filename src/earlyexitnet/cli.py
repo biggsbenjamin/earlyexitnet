@@ -51,11 +51,15 @@ def test_only(args):
     print("Setting up for testing")
     #load in the model from the path
     load_model(model, args.trained_model_path)
+    
+    num_workers = 1 if args.num_workers is None else args.num_workers
+    print(f"Number of workers: {num_workers}")
+    
     #skip to testing
     if args.dataset == 'mnist':
-        datacoll = MNISTDataColl(batch_size_test=batch_size_test)
+        datacoll = MNISTDataColl(batch_size_test=batch_size_test,num_workers=num_workers)
     elif args.dataset == 'cifar10':
-        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test)
+        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,num_workers=num_workers)
     else:
         raise NameError("Dataset not supported, check name:",
                         args.dataset)
@@ -75,7 +79,6 @@ def test(datacoll,model,exits,loss_f,
     else:
         device = torch.device("cpu")
     print("Device:", device)
-    
     # check if there are thresholds provided
     if args.top1_threshold is None and \
             args.entr_threshold is None:
