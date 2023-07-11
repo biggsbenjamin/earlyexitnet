@@ -292,7 +292,7 @@ class AccuTracker(Tracker):
         self.set_length_accum = np.zeros(bins,dtype=int)
     def get_num_correct(self, preds, labels):
         #predictions from model (not one hot), correct labels
-        return preds.argmax(dim=1).eq(labels).sum().item()
+        return preds.argmax().eq(labels).sum().item()
 
     ### functions to use ###
     def update_correct(self,result,label,bin_index=None): #for single iteration
