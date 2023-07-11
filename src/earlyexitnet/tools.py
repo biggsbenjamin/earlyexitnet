@@ -245,8 +245,7 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         else:
             #use accumulated values
             divisor = self.set_length_accum * self.batch_size
-        # import pdb;pdb.set_trace()
-        print(divisor)
+
         self.avg_vals = self.val_bins / divisor
         if return_list:
             return self.avg_vals.tolist()

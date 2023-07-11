@@ -85,7 +85,7 @@ def main():
   
   print(base2_softmax(test))
   print(torch.softmax(test,dim=-1))
-  print(subMax_softmax_float(test))
+  print(baseE_subMax_softmax_float(test))
   # y = 5.75
   
   # x = Fxp(y, signed=True, n_word=16, n_frac=8)

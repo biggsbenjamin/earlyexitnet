@@ -24,6 +24,7 @@ import os
 import numpy as np
 from datetime import datetime as dt
 from typing import Callable
+from time import perf_counter
 
 class Comparison:
     def __init__(
@@ -39,6 +40,8 @@ class Comparison:
         self.exit_track = exit_track
         self.accu_track = accu_track
         self.exit_thresholds = exit_thresholds
+        
+        self.total_time = 0
     
     def compare(self, results: torch.Tensor) -> tuple[int, torch.Tensor]:
         for exit_pos, (exit_layer,thr) in enumerate(zip(results,self.exit_thresholds)):
@@ -53,7 +56,8 @@ class Comparison:
         # exit_location = batched_compare(batched_results)
         
         # iterate over all batches
-        batched_results = batched_results.to(torch.device('cpu'))
+        start = perf_counter()
+        # batched_results = batched_results.to(torch.device('cpu'))
         for i in range(batched_results.size(dim=1)):
             index = torch.Tensor([i]).to(batched_results.device).type(torch.int32)
             # breakpoint()
@@ -61,13 +65,17 @@ class Comparison:
             exit_pos, result = self.compare(result_layer)
             
             self.exit_track.add_val(1, exit_pos)
-            # self.accu_track.update_correct(result, batched_correct_results[i], bin_index=exit_pos)
-    
-    def print_tracker_info(self):
-        print(self.name)
-        print(self.exit_track.get_avg(return_list=True))
-        # print(self.accu_track.get_accu(return_list=True))
+            self.accu_track.update_correct(result, batched_correct_results[i], bin_index=exit_pos)
+        stop = perf_counter()
         
+        self.total_time += stop - start
+    
+    
+    def print_tracker_info(self, num_samples):
+        print("---", self.name, "---")
+        print("Exit percentages:", self.exit_track.get_avg(return_list=True))
+        print("Accuracy:", self.accu_track.get_accu(return_list=True))
+        print("Total time:", self.total_time, "s", "Avg time:", self.total_time/num_samples, "s")
         
             # self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
             # self.entr_pc = self.exit_track_entr.get_avg(return_list=True)
@@ -133,8 +141,7 @@ class Tester:
             )
 
         #total exit accuracy over the test data
-        self.accu_track_totl = AccuTracker(
-            test_dl.batch_size,exits,self.sample_total)
+        self.accu_track_totl = AccuTracker(test_dl.batch_size,exits,self.sample_total)
 
         self.top1_pc = None # % exit for top1 confidence
         self.entr_pc = None # % exit for entropy confidence
@@ -148,38 +155,25 @@ class Tester:
         self.fast_accu_tot = None
 
 
-    def _entropy_comparison(self, results : list[list[float]], correct_results : list[float]):
-        for i,(exit,thr) in enumerate(zip(results,self.entropy_thresholds)):
-            softmax = nn.functional.softmax(exit,dim=-1)
-            entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
-            if entr < thr:
-                #print("entr exited at exit {}".format(i))
-                self.exit_track_entr.add_val(1,i)
-                self.accu_track_entr.update_correct(exit,correct_results,bin_index=i)
-                break
-            
+    def _entropy_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
+        softmax = nn.functional.softmax(layer,dim=-1)
+        entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
+        return entr < thresh
+        
     def _softmax_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
-        # breakpoint()
-        ### NOTE DEFIING TOP1 of SOFTMAX DECISION
         softmax = nn.functional.softmax(layer,dim=-1)
         
         sftmx_max = torch.max(softmax)
         
         return sftmx_max > thresh
 
-    def _fast_softmax_comparison(self, results : list[list[float]], correct_results : list[float]):
+    def _fast_softmax_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
         
-        for i,(exit,thr) in enumerate(zip(results,self.top1acc_thresholds)):
+        softmax = hw_sim.base2_softmax(layer)
+        # softmax = hw_sim.subMax_softmax(exit)            
+        sftmx_max = max(softmax)           
         
-            softmax = hw_sim.base2_softmax(exit)
-            # softmax = hw_sim.subMax_softmax(exit)            
-            sftmx_max = max(softmax)           
-            
-            if sftmx_max > thr:
-                #print("top1 exited at exit {}".format(i))
-                self.exit_track_fast.add_val(1,i)
-                self.accu_track_fast.update_correct(exit,correct_results,bin_index=i)
-                break
+        return sftmx_max > thresh
         
 
     def _test_multi_exit(self):
@@ -191,9 +185,11 @@ class Tester:
                 res = self.model(xb) # implicitly calls forward and returns array of arrays of the final layer for each exit (techically list of tensors for each exit)
                 # res has dimension [num_exits, batch_size, num_classes]
                 
-                # self.accu_track_totl.update_correct(res,yb)
+                self.accu_track_totl.update_correct(res,yb)
             
                 self.softmax_cmp.eval(res, yb)
+                self.entropy_cmp.eval(res, yb)
+                self.fast_softmax_cmp.eval(res, yb)
                 
 
     def _test_single_exit(self):
@@ -209,7 +205,7 @@ class Tester:
         self.model.eval()
         self.model.to(self.device)
         with torch.no_grad():
-            for xb,yb in test_dl:
+            for xb,yb in self.test_dl:
                 xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
                 for i,exit in enumerate(res):
@@ -227,7 +223,9 @@ class Tester:
         if self.exits > 1:
             self._test_multi_exit()
             
-            self.softmax_cmp.print_tracker_info()
+            self.softmax_cmp.print_tracker_info(self.sample_total)
+            self.entropy_cmp.print_tracker_info(self.sample_total)
+            self.fast_softmax_cmp.print_tracker_info(self.sample_total)
             
             # self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
             # self.entr_pc = self.exit_track_entr.get_avg(return_list=True)

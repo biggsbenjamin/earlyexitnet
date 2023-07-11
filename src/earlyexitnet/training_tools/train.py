@@ -14,7 +14,7 @@ from earlyexitnet.models.Branchynet import \
 # NOTE models that don't output a list (over exits) won't work
 #from earlyexitnet.models.Lenet import Lenet
 from earlyexitnet.models.Testnet import \
-    Testnet, BrnFirstExit, BrnSecondExit, Backbone_se
+    Testnet, BrnFirstExit, BrnSecondExit, Backbone_se, BrnFirstExit_se
 
 # importing accu + loss trackers and dataloader classes
 from earlyexitnet.tools import LossTracker, AccuTracker

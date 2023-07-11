@@ -22,6 +22,8 @@ import torch
 # general imports
 import os
 from datetime import datetime as dt
+from time import perf_counter
+
 
 def get_exits(model_str):
     # set number of exits
@@ -32,7 +34,7 @@ def get_exits(model_str):
                        'b_lenet_se','b_lenet_cifar']:
         exits = 2
     else:
-        raise NameError("Model not supported, check name:",args.model_name)
+        raise NameError("Model not supported, check name:",model_str)
 
     return exits
 
@@ -110,7 +112,15 @@ def test(datacoll,model,exits,loss_f,
 
     top1_thr = net_test.top1acc_thresholds
     entr_thr = net_test.entropy_thresholds
+    start = perf_counter()
     net_test.test()
+    stop = perf_counter()
+    elapsed_time = start-stop
+    
+    print("### TEST FINISHED ###")
+    print("Time elapsed:", elapsed_time, "s")
+    print("top1 thrs: {},  entropy thrs: {}".format(top1_thr, entr_thr))
+    
     #get test results
     test_size = net_test.sample_total
     top1_pc = net_test.top1_pc
@@ -126,13 +136,12 @@ def test(datacoll,model,exits,loss_f,
     fast_tot_acc = net_test.fast_accu_tot
     
     #get percentage exits and avg accuracies, add some timing etc.
-    print("top1 thrs: {},  entropy thrs: {}".format(top1_thr, entr_thr))
-    print("top1 exit %s {},  entropy exit %s {},  fast exit %s {}".format(top1_pc, entropy_pc, fast_pc))
-    print("Accuracy over exited samples:")
-    print("top1 exit acc % {}, entropy exit acc % {}, fast exit acc % {}".format(top1acc, entracc, fast_accu))
-    print("Accuracy over network:")
-    print("top1 acc % {}, entr acc % {}, fast acc % {}".format(t1_tot_acc,ent_tot_acc,fast_tot_acc))
-    print("Accuracy of the individual exits over full set: {}".format(full_exit_accu))
+    # print("top1 exit %s {},  entropy exit %s {},  fast exit %s {}".format(top1_pc, entropy_pc, fast_pc))
+    # print("Accuracy over exited samples:")
+    # print("top1 exit acc % {}, entropy exit acc % {}, fast exit acc % {}".format(top1acc, entracc, fast_accu))
+    # print("Accuracy over network:")
+    # print("top1 acc % {}, entr acc % {}, fast acc % {}".format(t1_tot_acc,ent_tot_acc,fast_tot_acc))
+    # print("Accuracy of the individual exits over full set: {}".format(full_exit_accu))
 
     ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
     with open(notes_path, 'a') as notes:
