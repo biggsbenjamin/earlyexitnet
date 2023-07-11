@@ -50,9 +50,9 @@ class Tester:
             self.exit_track_entr = Tracker(test_dl.batch_size,exits,self.sample_total)
             self.exit_track_fast = Tracker(test_dl.batch_size,exits,self.sample_total)
             #individual accuracy over samples exited
-            self.accu_track_top1 = AccuTracker(test_dl.batch_size,exits)
-            self.accu_track_entr = AccuTracker(test_dl.batch_size,exits)
-            self.accu_track_fast = AccuTracker(test_dl.batch_size,exits)
+            self.accu_track_top1 = AccuTracker(1,exits)
+            self.accu_track_entr = AccuTracker(1,exits)
+            self.accu_track_fast = AccuTracker(1,exits)
 
         #total exit accuracy over the test data
         self.accu_track_totl = AccuTracker(
@@ -81,20 +81,24 @@ class Tester:
                 break
             
     def _softmax_comparison(self, results : list[list[float]], correct_results : list[float]):
-        for i,(exit,thr) in enumerate(zip(results,self.top1acc_thresholds)):
-        ### NOTE DEFINING TOP1 of SOFTMAX DECISION
-            softmax = nn.functional.softmax(exit,dim=-1)
-            sftmx_max = torch.max(softmax)
-            if sftmx_max > thr:
-                #print("top1 exited at exit {}".format(i))
-                self.exit_track_top1.add_val(1,i)
-                self.accu_track_top1.update_correct(exit,correct_results,bin_index=i)
-                break
+        
+        for i in range(self.test_dl.batch_size):
+            for j, thr in enumerate(self.top1acc_thresholds):
+            # for i,(exit,thr) in enumerate(zip(results,self.top1acc_thresholds)):
+                ### NOTE DEFIING TOP1 of SOFTMAX DECISION
+                softmax = nn.functional.softmax(results[j][i],dim=-1)
+                sftmx_max = torch.max(softmax)
+                if sftmx_max > thr:
+                    #print("top1 exited at exit {}".format(i))
+                    self.exit_track_top1.add_val(1,j)
+                    self.accu_track_top1.update_correct(results[j][i].reshape(1,10),correct_results[i],bin_index=j)
+                    break
 
     def _fast_softmax_comparison(self, results : list[list[float]], correct_results : list[float]):
         for i,(exit,thr) in enumerate(zip(results,self.top1acc_thresholds)):
         
-            softmax = hw_sim.fast_softmax(exit)
+            softmax = hw_sim.base2_softmax(exit)
+            # softmax = hw_sim.subMax_softmax(exit)            
             sftmx_max = max(softmax)           
             
             if sftmx_max > thr:
@@ -114,7 +118,7 @@ class Tester:
                 
                 self._softmax_comparison(res,yb)
                 self._entropy_comparison(res,yb)
-                self._fast_softmax_comparison(res,yb)
+                # self._fast_softmax_comparison(res,yb)
 
     def _test_single_exit(self):
         self.model.eval()
@@ -148,13 +152,13 @@ class Tester:
             self._test_multi_exit()
             self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
             self.entr_pc = self.exit_track_entr.get_avg(return_list=True)
-            self.fast_pc = self.exit_track_fast.get_avg(return_list=True)
+            # self.fast_pc = self.exit_track_fast.get_avg(return_list=True)
             self.top1_accu = self.accu_track_top1.get_accu(return_list=True)
             self.entr_accu = self.accu_track_entr.get_accu(return_list=True)
-            self.fast_accu = self.accu_track_fast.get_accu(return_list=True)
-            self.top1_accu_tot = np.sum(self.accu_track_top1.val_bins)/self.sample_total
+            # self.fast_accu = self.accu_track_fast.get_accu(return_list=True)
+            self.top1_accu_tot = np.sum(self.accu_track_top1.val_bins / self.test_dl.batch_size)/self.sample_total
             self.entr_accu_tot = np.sum(self.accu_track_entr.val_bins)/self.sample_total
-            self.fast_accu_tot = np.sum(self.accu_track_fast.val_bins)/self.sample_total
+            # self.fast_accu_tot = np.sum(self.accu_track_fast.val_bins)/self.sample_total
         else:
             self._test_single_exit()
         #accuracy of each exit over FULL data set
