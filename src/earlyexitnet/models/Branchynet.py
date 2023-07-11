@@ -146,10 +146,12 @@ class B_Lenet(nn.Module):
     def _forward_training(self, x):
         #TODO make jit compatible - not urgent
         #broken because returning list()
-        res = []
+        res = torch.Tensor([]).to(x.device)
         for bb, ee in zip(self.backbone, self.exits):
+            breakpoint()
             x = bb(x)
-            res.append(ee(x))
+            # res.append(ee(x))
+            res = torch.cat((res,ee(x)))
         return res
 
     def forward(self, x):
