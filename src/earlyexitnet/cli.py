@@ -16,6 +16,9 @@ from earlyexitnet.testing_tools.test import Tester
 from earlyexitnet.tools import \
     MNISTDataColl,CIFAR10DataColl,load_model,path_check
 
+from earlyexitnet.onnx_tools.onnx_helpers import \
+    to_onnx
+
 # import nn for loss function
 import torch.nn as nn
 # torch for cuda check
@@ -68,6 +71,7 @@ def test_only(args):
     save_path = args.trained_model_path
     # RUN THE MODEL OVER TEST DATASET
     test(datacoll,model,exits,loss_f,save_path,notes_path,args)
+    return model
 
 def test(datacoll,model,exits,loss_f,
          save_path,notes_path,args):
@@ -130,7 +134,7 @@ def test(datacoll,model,exits,loss_f,
         notes.write("Test sample size: {}\n".format(test_size))
         notes.write("top1 thrs: {},  entropy thrs: {}\n".format(top1_thr, entr_thr))
         notes.write("top1 exit %s {}, entropy exit %s {}\n".format(top1_pc, entropy_pc))
-        notes.write("best* model "+save_path+"\n")
+        notes.write("Tested model @ "+save_path+"\n")
         notes.write("Accuracy over exited samples:\n")
         notes.write("top1 exit acc % {}, entropy exit acc % {}\n".format(top1acc, entracc))
         notes.write("Accuracy over EE network:\n")
@@ -189,7 +193,7 @@ def train_n_test(args):
     print("Got training data, batch size:",batch_size_train)
 
     #start training loop for epochs - at some point add recording points here
-    path_str = 'outputs/'
+    path_str = f'outputs/{args.model_name}/'
     pretrain_backbone=True
     if args.bb_epochs == 0:
         # if no model provided, joint from scratch
@@ -225,16 +229,22 @@ def train_n_test(args):
         notes.write("Training batch size {}, Test batchsize {}\n".format(batch_size_train,
                                                                        batch_size_test))
         # record exit weighting (if model has it)
-        if hasattr(model,'exit_loss_weights'):
+        if hasattr(net_trainer.model,'exit_loss_weights'):
             notes.write("model training exit weights:"+str(net_trainer.model.exit_loss_weights)+"\n")
         notes.write("Path to last model:"+str(last)+"\n")
+        notes.write("Path to best model:"+str(best)+"\n")
     notes.close()
 
     #TODO graph training data
     #separate graphs for pre training and joint training
 
+    # loading best model
+    print(f"Loading best model: {best}")
+    load_model(net_trainer.model, best)
+
     #once trained, run it on the test data
-    test(datacoll,net_trainer.model,exits,loss_f,save_path,notes_path,args)
+    test(datacoll,net_trainer.model,exits,loss_f,best,notes_path,args)
+    return net_trainer.model,best
 
 """
 Main function that sorts out the CLI args and runs training and testing function.
@@ -265,9 +275,9 @@ def main():
                         help='batch size for the training of the network')
     parser.add_argument('-bbe','--bb_epochs', metavar='N',type=int, default=1, required=False,
             help='Epochs to train backbone separately, or non ee network')
-    parser.add_argument('-jte','--jt_epochs', metavar='n',type=int, default=1, required=False,
+    parser.add_argument('-jte','--jt_epochs', metavar='n',type=int, default=0, required=False,
             help='epochs to train exits jointly with backbone')
-    parser.add_argument('-exe','--ex_epochs', metavar='n',type=int, default=1, required=False,
+    parser.add_argument('-exe','--ex_epochs', metavar='n',type=int, default=0, required=False,
             help='epochs to train exits with frozen backbone')
     parser.add_argument('-rn', '--run_notes', type=str, required=False,
             help='Some notes to add to the train/test information about the model or otherwise')
@@ -295,6 +305,11 @@ def main():
     parser.add_argument('-t1','--top1_threshold', nargs='+',type=float,required=False)
     parser.add_argument('-entr','--entr_threshold', nargs='+',type=float,required=False)
 
+    # generate onnx graph for the model
+    parser.add_argument('-go', '--generate_onnx',metavar='PATH',type=path_check,
+                        required=False,
+                        help='Generate onnx from loaded or trained Pytorch model, specify the directory of the output onnx')
+
     #TODO arguments to add
         #training loss function
         #some kind of testing specification
@@ -302,10 +317,34 @@ def main():
     # parse the arguments
     args = parser.parse_args()
 
-    if args.trained_model_path is not None:
-        test_only(args)
+    if args.trained_model_path is not None and args.jt_epochs==0:
+        model = test_only(args)
+        model_path = args.trained_model_path
     else:
-        train_n_test(args)
+        model,model_path = train_n_test(args)
+
+    if args.generate_onnx is not None:
+        # set inference mode
+        if hasattr(model, 'set_fast_inf_mode'):
+            model.set_fast_inf_mode()
+        else:
+            model.eval()
+        # get input shape for graph gen
+        if args.dataset == 'mnist':
+            shape = [1,28,28]
+        elif args.dataset in ['cifar10','cifar100']:
+            shape = [3,32,32]
+        else:
+            raise NameError("Unknown input shape for model.")
+        # generate model name
+        pt_path = os.path.splitext(os.path.basename(model_path))[0]
+        fname = f'{args.model_name}_{pt_path}.onnx'
+        # convert to onnx and save to op
+        to_onnx(model,shape,batch_size=1,
+                path=args.generate_onnx,
+                fname=fname)
+
+
 
 if __name__ == "__main__":
     main()

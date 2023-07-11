@@ -43,13 +43,13 @@ def to_onnx(model,
 
     # Just In Time compilation of pytorch model
     # to script Intermediate Representation
-    #scr_model = torch.jit.script(model)
-    #print("PRINTING PYTORCH MODEL SCRIPT")
-    #print(scr_model.graph, "\n")
-    #ex_out = scr_model(x) # get output of script model
+    scr_model = torch.jit.script(model)
+    print("PRINTING PYTORCH MODEL SCRIPT")
+    print(scr_model.graph, "\n")
+    ex_out = scr_model(x) # get output of script model
 
     torch.onnx.export(
-        model,      # model being run
+        scr_model,      # model being run
         x,              # model input (or a tuple for multiple inputs)
         sv_pnt,         # where to save the model (can be a file or file-like object)
         export_params=True, # store the trained parameter weights inside the model file
@@ -125,6 +125,7 @@ def onnx_param_import_resnet8(args):
     dl_iter = iter(test_dl)
     x,y_gnd= next(dl_iter)
 
+    # Input values for ml perf resnet8 are NOT scaled down from 0,255
     x=x*255
 
     print("what numbers?:",x[0][0])
