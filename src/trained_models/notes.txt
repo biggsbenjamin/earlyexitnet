@@ -448,3 +448,33 @@ Accuracy over EE network:
 top1 acc % None, entr acc % None
 Accuracy of the individual exits over full set: [0.0, 0.0]
 run notes example
+
+#######################################
+
+Testing results: for b_lenet_se @ 2023-07-11_175622
+  on dataset mnist
+Test sample size: 20
+top1 thrs: [0.75, 0],  entropy thrs: [0.01, 1000000]
+top1 exit %s None, entropy exit %s None
+best* model ./trained_models/b_lenet_se.pth
+Accuracy over exited samples:
+top1 exit acc % None, entropy exit acc % None
+Accuracy over EE network:
+top1 acc % None, entr acc % None
+Accuracy of the individual exits over full set: [0.0, 0.0]
+run notes example
+
+#######################################
+
+Testing results: for b_lenet_se @ 2023-07-11_175911
+  on dataset mnist
+Test sample size: 20
+top1 thrs: [0.75, 0],  entropy thrs: [0.01, 1000000]
+top1 exit %s None, entropy exit %s None
+best* model ./trained_models/b_lenet_se.pth
+Accuracy over exited samples:
+top1 exit acc % None, entropy exit acc % None
+Accuracy over EE network:
+top1 acc % None, entr acc % None
+Accuracy of the individual exits over full set: [0.004, 0.0]
+run notes example

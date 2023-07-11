@@ -25,6 +25,7 @@ import numpy as np
 from datetime import datetime as dt
 from typing import Callable
 from time import perf_counter
+from tqdm import tqdm
 
 class Comparison:
     def __init__(
@@ -180,17 +181,19 @@ class Tester:
         self.model.eval()
         self.model.to(self.device)
         with torch.no_grad():
-            for xb,yb in self.test_dl:
-                xb,yb = xb.to(self.device),yb.to(self.device)
-                res = self.model(xb) # implicitly calls forward and returns array of arrays of the final layer for each exit (techically list of tensors for each exit)
-                # res has dimension [num_exits, batch_size, num_classes]
+            with tqdm(total=self.sample_total*self.test_dl.batch_size) as pbar:
+                for xb,yb in self.test_dl:
+                    xb,yb = xb.to(self.device),yb.to(self.device)
+                    res = self.model(xb) # implicitly calls forward and returns array of arrays of the final layer for each exit (techically list of tensors for each exit)
+                    # res has dimension [num_exits, batch_size, num_classes]
+                    
+                    self.accu_track_totl.update_correct(res,yb)
                 
-                self.accu_track_totl.update_correct(res,yb)
-            
-                self.softmax_cmp.eval(res, yb)
-                self.entropy_cmp.eval(res, yb)
-                self.fast_softmax_cmp.eval(res, yb)
-                
+                    self.softmax_cmp.eval(res, yb)
+                    self.entropy_cmp.eval(res, yb)
+                    self.fast_softmax_cmp.eval(res, yb)
+                    
+                    pbar.update(self.test_dl.batch_size)
 
     def _test_single_exit(self):
         self.model.eval()

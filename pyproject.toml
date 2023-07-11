@@ -25,6 +25,7 @@ dependencies = [
     "scipy>=1.2.1",
     "matplotlib",
     "fxpmath",
+    "tqdm"
 ]
 
 [project.optional-dependencies]
