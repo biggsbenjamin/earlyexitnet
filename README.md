@@ -49,19 +49,21 @@ cmake version required >= 3.1 and can be installed to conda using `conda install
 
 `python -m earlyexitnet.cli -m [model name] -bbe [backbone epochs] -jte [joint exit & backbone epochs] -rn "run notes example" -t1 0.75 -entr 0.01`
 
-`python -m earlyexitnet.cli -m b_lenet -bbe 50 -jte 30 -rn "run notes example" -t1 0.75 -entr 0.01`
+`python -m earlyexitnet.cli -m b_lenet_se -bbe 50 -jte 30 -rn "run notes example" -t1 0.75 -entr 0.01`
 
 ## Test Only Example
 
-`python -m earlyexitnet.cli -m b_lenet -mp /path/to/saved/model -rn "run notes example" -t1 0.75 -entr 0.01`
+`python -m earlyexitnet.cli -m b_lenet -mp /path/to/saved/model.pth -rn "run notes example" -t1 0.75 -entr 0.01`
 
 This sets the top1 (maximum softmax) threshold to 0.75 and the entropy threshold to 0.01.
 
 ## Convert Model to ONNX Example
 
+`python -m earlyexitnet.cli -m b_lenet -mp /path/to/saved/model.pth -rn "run notes example" -go path/to/onnx/folder/`
 
 ## List of Models
 
+TBD
 
 ## Getting visual representation of the onnx graph
 Use [netron](ihttps://netron.app/) viewer
