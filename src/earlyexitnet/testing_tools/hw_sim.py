@@ -95,9 +95,11 @@ def baseE_subMax_softmax_float(final_layer: torch.Tensor) -> list[float]:
 
 def base2_subMax_softmax_fixed(final_layer: torch.Tensor) -> torch.Tensor: 
   LAYER = Fxp(None, signed=True, n_word=16, n_frac=8)
-  EXP   = Fxp(None, signed=False, n_word=16, n_frac=15) # sacrificing many bits 
+  EXP   = Fxp(None, signed=False, n_word=2, n_frac=1) # sacrificing many bits 
   
-  zs = final_layer.squeeze().numpy()
+  
+  
+  zs = final_layer.squeeze().cpu().numpy()
   # convert to fixed point
   fxd_zs = Fxp(zs).like(LAYER)
   
@@ -120,7 +122,6 @@ def base2_subMax_softmax_fixed(final_layer: torch.Tensor) -> torch.Tensor:
   
   tmp = torch.Tensor(exp_zs.get_val())
   tmp /= exp_sum.get_val()
-  
   # for i, z in enumerate(fxd_zs):
   #   e_z = Fxp().like(EXP)
   #   e_z.equal(2 ** z) # compute two to the power z

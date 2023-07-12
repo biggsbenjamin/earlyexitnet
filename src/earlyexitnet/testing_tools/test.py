@@ -117,29 +117,43 @@ class Tester:
             # self.accu_track_entr = AccuTracker(1,exits)
             # self.accu_track_fast = AccuTracker(1,exits)
 
-            self.entropy_cmp = Comparison(
-                "Entropy",
-                self._entropy_comparison,
-                Tracker(test_dl.batch_size,exits,self.sample_total),
-                AccuTracker(1,exits),
-                self.entropy_thresholds
-            )
-            
-            self.softmax_cmp = Comparison(
-                "Softmax",
-                self._softmax_comparison,
-                Tracker(test_dl.batch_size,exits,self.sample_total),
-                AccuTracker(1,exits),
-                self.top1acc_thresholds
-            )
-            
-            self.fast_softmax_cmp = Comparison(
-                "Quick Softmax",
-                self._fast_softmax_comparison,
-                Tracker(test_dl.batch_size,exits,self.sample_total),
-                AccuTracker(1,exits),
-                self.top1acc_thresholds
-            )
+            self.comparators = [
+                Comparison(
+                    "Entropy",
+                    self._entropy_comparison,
+                    Tracker(test_dl.batch_size,exits,self.sample_total),
+                    AccuTracker(1,exits),
+                    self.entropy_thresholds
+                ),            
+                Comparison(
+                    "Softmax",
+                    self._softmax_comparison,
+                    Tracker(test_dl.batch_size,exits,self.sample_total),
+                    AccuTracker(1,exits),
+                    self.top1acc_thresholds
+                ),            
+                Comparison(
+                    "Quick Base-2 Softmax",
+                    self._fast_softmax_comparison,
+                    Tracker(test_dl.batch_size,exits,self.sample_total),
+                    AccuTracker(1,exits),
+                    self.top1acc_thresholds
+                ),
+                Comparison(
+                    "Base-2 Sub-Softmax",
+                    self._base2_sub_softmax_comparison,
+                    Tracker(test_dl.batch_size,exits,self.sample_total),
+                    AccuTracker(1,exits),
+                    self.top1acc_thresholds
+                ),
+                # Comparison(
+                #     "Base2 old Softmax",
+                #     self._base2_softmax_comparison,
+                #     Tracker(test_dl.batch_size,exits,self.sample_total),
+                #     AccuTracker(1,exits),
+                #     self.top1acc_thresholds
+                # )
+                ]
 
         #total exit accuracy over the test data
         self.accu_track_totl = AccuTracker(test_dl.batch_size,exits,self.sample_total)
@@ -170,18 +184,26 @@ class Tester:
 
     def _fast_softmax_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
         
-        softmax = hw_sim.base2_softmax(layer)
+        softmax = hw_sim.base2_softmax_torch(layer)
         # softmax = hw_sim.subMax_softmax(exit)            
-        sftmx_max = max(softmax)           
+        sftmx_max = torch.max(softmax)           
         
         return sftmx_max > thresh
+    
+    def _base2_sub_softmax_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
         
+        softmax = hw_sim.base2_subMax_softmax_fixed(layer)
+        # softmax = hw_sim.subMax_softmax(exit)            
+        sftmx_max = torch.max(softmax)           
+        breakpoint()
+        
+        return sftmx_max > thresh
 
     def _test_multi_exit(self):
         self.model.eval()
         self.model.to(self.device)
         with torch.no_grad():
-            with tqdm(total=self.sample_total*self.test_dl.batch_size) as pbar:
+            with tqdm(total=self.sample_total*self.test_dl.batch_size, unit="samples") as pbar:
                 for xb,yb in self.test_dl:
                     xb,yb = xb.to(self.device),yb.to(self.device)
                     res = self.model(xb) # implicitly calls forward and returns array of arrays of the final layer for each exit (techically list of tensors for each exit)
@@ -189,9 +211,8 @@ class Tester:
                     
                     self.accu_track_totl.update_correct(res,yb)
                 
-                    self.softmax_cmp.eval(res, yb)
-                    self.entropy_cmp.eval(res, yb)
-                    self.fast_softmax_cmp.eval(res, yb)
+                    for comp in self.comparators:
+                        comp.eval(res, yb)
                     
                     pbar.update(self.test_dl.batch_size)
 
@@ -226,9 +247,8 @@ class Tester:
         if self.exits > 1:
             self._test_multi_exit()
             
-            self.softmax_cmp.print_tracker_info(self.sample_total)
-            self.entropy_cmp.print_tracker_info(self.sample_total)
-            self.fast_softmax_cmp.print_tracker_info(self.sample_total)
+            for comp in self.comparators:
+                comp.print_tracker_info(self.sample_total)
             
             # self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
             # self.entr_pc = self.exit_track_entr.get_avg(return_list=True)

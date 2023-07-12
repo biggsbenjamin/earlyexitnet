@@ -115,7 +115,7 @@ def test(datacoll,model,exits,loss_f,
     start = perf_counter()
     net_test.test()
     stop = perf_counter()
-    elapsed_time = start-stop
+    elapsed_time = stop-start
     
     print("### TEST FINISHED ###")
     print("Time elapsed:", elapsed_time, "s")
