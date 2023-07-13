@@ -23,6 +23,7 @@ import torch
 import os
 from datetime import datetime as dt
 from time import perf_counter
+import json
 
 
 def get_exits(model_str):
@@ -66,8 +67,11 @@ def test_only(args):
         raise NameError("Dataset not supported, check name:",
                         args.dataset)
     # path to notes write up
-    notes_path = os.path.join(
-        os.path.split(args.trained_model_path)[0],'notes.txt')
+    if args.notes_path is None:
+        notes_path = os.path.join(
+            os.path.split(args.trained_model_path)[0],'notes.txt')
+    else:
+        notes_path = args.notes_path
     # path to the model (already trained)
     save_path = args.trained_model_path
     # RUN THE MODEL OVER TEST DATASET
@@ -106,9 +110,9 @@ def test(datacoll,model,exits,loss_f,
         entr_thr.append(1000000)
         # Creating Tester object
         net_test = Tester(model,test_dl,loss_f,exits,
-                top1_thr,entr_thr,device)
+                top1_thr,entr_thr,args.confidence_function,device)
     else:
-        net_test = Tester(model,test_dl,loss_f,exits,device)
+        net_test = Tester(model,test_dl,loss_f,exits,comp_funcs=args.confidence_function,device=device)
 
     top1_thr = net_test.top1acc_thresholds
     entr_thr = net_test.entropy_thresholds
@@ -120,46 +124,23 @@ def test(datacoll,model,exits,loss_f,
     print("top1 thrs: {},  entropy thrs: {}".format(top1_thr, entr_thr))
     print("Total time elapsed:", elapsed_time, "s")
     
-    #get test results
-    # test_size = net_test.sample_total
-    # top1_pc = net_test.top1_pc
-    # entropy_pc = net_test.entr_pc
-    # top1acc = net_test.top1_accu
-    # entracc = net_test.entr_accu
-    # t1_tot_acc = net_test.top1_accu_tot
-    # ent_tot_acc = net_test.entr_accu_tot
-    # full_exit_accu = net_test.full_exit_accu
-    
-    # fast_pc = net_test.fast_pc
-    # fast_accu = net_test.fast_accu
-    # fast_tot_acc = net_test.fast_accu_tot
-    
-    #get percentage exits and avg accuracies, add some timing etc.
-    # print("top1 exit %s {},  entropy exit %s {},  fast exit %s {}".format(top1_pc, entropy_pc, fast_pc))
-    # print("Accuracy over exited samples:")
-    # print("top1 exit acc % {}, entropy exit acc % {}, fast exit acc % {}".format(top1acc, entracc, fast_accu))
-    # print("Accuracy over network:")
-    # print("top1 acc % {}, entr acc % {}, fast acc % {}".format(t1_tot_acc,ent_tot_acc,fast_tot_acc))
-    # print("Accuracy of the individual exits over full set: {}".format(full_exit_accu))
+    ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
+    with open(notes_path, 'a') as notes:
+        notes.write("\n#######################################\n")
+        notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
+        notes.write(f"on dataset {args.dataset}\n")
+        
+        test_stats = net_test.get_stats()
+        test_stats['datetime'] = ts
+        
+        notes.write("JSON data:\n")
+        pretty = json.dumps(test_stats, indent=2)
+        notes.write(pretty)
+        notes.write('\n')
 
-    # ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
-    # with open(notes_path, 'a') as notes:
-    #     notes.write("\n#######################################\n")
-    #     notes.write(f"\nTesting results: for {args.model_name} @ {ts}\n  ")
-    #     notes.write(f"on dataset {args.dataset}\n")
-    #     notes.write("Test sample size: {}\n".format(test_size))
-    #     notes.write("top1 thrs: {},  entropy thrs: {}\n".format(top1_thr, entr_thr))
-    #     notes.write("top1 exit %s {}, entropy exit %s {}\n".format(top1_pc, entropy_pc))
-    #     notes.write("best* model "+save_path+"\n")
-    #     notes.write("Accuracy over exited samples:\n")
-    #     notes.write("top1 exit acc % {}, entropy exit acc % {}\n".format(top1acc, entracc))
-    #     notes.write("Accuracy over EE network:\n")
-    #     notes.write("top1 acc % {}, entr acc % {}\n".format(t1_tot_acc,ent_tot_acc))
-    #     notes.write("Accuracy of the individual exits over full set: {}\n".format(full_exit_accu))
-
-    #     if args.run_notes is not None:
-    #         notes.write(args.run_notes+"\n")
-    # notes.close()
+        if args.run_notes is not None:
+            notes.write(args.run_notes+"\n")
+    notes.close()
 
 """
 Main training and testing function run from the cli
@@ -292,6 +273,12 @@ def main():
             help='epochs to train exits with frozen backbone')
     parser.add_argument('-rn', '--run_notes', type=str, required=False,
             help='Some notes to add to the train/test information about the model or otherwise')
+    
+    parser.add_argument('-np', '--notes_path', type=str, required=False,
+            help='Path to location for notes to be saved')
+    parser.add_argument('-cf','--confidence_function',required=False,nargs='+', type=int,
+            help='Choose which function to be used when determining the confidence of the network at a given exit, pick one or many')
+
 
     #parser.add_argument('--seed', metavar='N', type=int, default=random.randint(0,2**32-1),
     #    help='Seed for training, NOT CURRENTLY USED')

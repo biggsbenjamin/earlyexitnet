@@ -97,17 +97,19 @@ class Comparison:
         print(f"Total Accuracy: {np.dot(exit_perc, accu_perc):4f}")
         print("Total time:", self.total_time, "s", "Avg time:", self.total_time/num_samples, "s")
         
-            # self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
-            # self.entr_pc = self.exit_track_entr.get_avg(return_list=True)
-            # # self.fast_pc = self.exit_track_fast.get_avg(return_list=True)
-            # self.top1_accu = self.accu_track_top1.get_accu(return_list=True)
-            # self.entr_accu = self.accu_track_entr.get_accu(return_list=True)
-            # # self.fast_accu = self.accu_track_fast.get_accu(return_list=True)
-            # self.top1_accu_tot = np.sum(self.accu_track_top1.val_bins / self.test_dl.batch_size)/self.sample_total
+    def get_comp_info(self):
+        return_val = {}
+        
+        return_val['name'] = self.name
+        return_val['exit_percs'] = self.exit_track.get_avg(return_list=True)
+        return_val['accu_percs'] = self.accu_track.get_avg(return_list=True)
+        return_val['exit_threshs'] = self.exit_thresholds
+        return_val['combined_accuracy'] = np.dot(self.exit_track.get_avg(return_list=True), self.accu_track.get_avg(return_list=True))
+        return return_val
 
 class Tester:
     def __init__(self,model,test_dl,loss_f=nn.CrossEntropyLoss(),exits=2,
-            top1acc_thresholds=[],entropy_thresholds=[],device=None):
+            top1acc_thresholds=[],entropy_thresholds=[],comp_funcs=None,device=None):
         self.model=model
         self.test_dl=test_dl
         self.loss_f=loss_f
@@ -115,6 +117,9 @@ class Tester:
         self.sample_total = len(test_dl)
         self.top1acc_thresholds = top1acc_thresholds
         self.entropy_thresholds = entropy_thresholds
+        
+        self.comp_funcs = comp_funcs
+        
         if device is None or not torch.cuda.is_available():
             self.device = torch.device("cpu")
         else:
@@ -224,8 +229,12 @@ class Tester:
                     
                     self.accu_track_totl.update_correct_list(res,yb)
                     
-                    for comp in self.comparators:
-                        comp.eval(res, yb)
+                    if self.comp_funcs is not None:
+                        for comp in self.comp_funcs:
+                            self.comparators[comp].eval(res,yb)
+                    else:
+                        for comp in self.comparators:
+                            comp.eval(res, yb)
                     
                     pbar.update(self.test_dl.batch_size)
 
@@ -255,14 +264,39 @@ class Tester:
                     print("exit {} entropy: {}".format(i, entr))
                     #print("exit CE loss: {}".format(loss_f(exit,yb)))
 
+    def get_stats(self):
+        
+        return_val = {}
+        
+        return_val['comps'] = []
+        
+        if self.comp_funcs is not None:
+            for comp in self.comp_funcs:
+                return_val['comps'].append(self.comparators[comp].get_comp_info())
+        else:
+            for comp in self.comparators:
+                return_val['comps'].append(comp.get_comp_info())
+
+        return_val['num_exits'] = self.exits
+        return_val['num_samples'] = self.sample_total * self.test_dl.batch_size
+        return_val['batch_size'] = self.test_dl.batch_size
+        return_val['accu_per_exit'] = self.accu_track_totl.get_accu(return_list=True)
+        
+        return return_val
+
     def test(self):
         print(f"Test of length {self.sample_total} starting")
         if self.exits > 1:
             self._test_multi_exit()
             print("### TEST FINISHED ###")
                         
-            for comp in self.comparators:
-                comp.print_tracker_info(self.sample_total)
+                        
+            if self.comp_funcs is not None:
+                for comp in self.comp_funcs:
+                    self.comparators[comp].print_tracker_info(self.sample_total)
+            else:
+                for comp in self.comparators:
+                    comp.print_tracker_info(self.sample_total)    
             print("########")
             # self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
             # self.entr_pc = self.exit_track_entr.get_avg(return_list=True)
