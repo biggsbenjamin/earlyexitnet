@@ -35,6 +35,7 @@ class Tester:
         else:
             self.device = device
 
+        self.batch_size = test_dl.batch_size
         if exits > 1:
             #TODO make thresholds a more flexible param
             #setting top1acc threshold for exiting (final exit set to 0)
@@ -43,15 +44,15 @@ class Tester:
             #self.entropy_thresholds = [0.025,1000000]
             #set up stat trackers
             #samples exited
-            self.exit_track_top1 = Tracker(test_dl.batch_size,exits,self.sample_total)
-            self.exit_track_entr = Tracker(test_dl.batch_size,exits,self.sample_total)
+            self.exit_track_top1 = Tracker(self.batch_size,exits,self.sample_total)
+            self.exit_track_entr = Tracker(self.batch_size,exits,self.sample_total)
             #individual accuracy over samples exited
-            self.accu_track_top1 = AccuTracker(test_dl.batch_size,exits)
-            self.accu_track_entr = AccuTracker(test_dl.batch_size,exits)
+            self.accu_track_top1 = AccuTracker(self.batch_size,exits)
+            self.accu_track_entr = AccuTracker(self.batch_size,exits)
 
         #total exit accuracy over the test data
         self.accu_track_totl = AccuTracker(
-            test_dl.batch_size,exits,self.sample_total)
+            self.batch_size,exits,self.sample_total)
 
         self.top1_pc = None # % exit for top1 confidence
         self.entr_pc = None # % exit for entropy confidence
@@ -61,6 +62,43 @@ class Tester:
         self.top1_accu_tot = None #total accuracy of network given exit strat
         self.entr_accu_tot = None #total accuracy of network given exit strat
 
+    def _thr_max_softmax(self,exit_results, thr):
+        ### NOTE DEFINING TOP1 of SOFTMAX DECISION
+        sftmax = nn.functional.softmax(exit_results,dim=-1)
+        # getting maximum values from softmax op
+        sftmx_max = torch.max(sftmax, dim=-1).values
+        # comparing to threshold to get boolean tensor mask for exit
+        exit_mask = sftmx_max.gt(thr)
+        return exit_mask
+
+    def _thr_entropy(self,exit_results, thr):
+        ### NOTE DEFINING entropy less than threshold
+        sftmax = nn.functional.softmax(exit_results,dim=-1)
+        entr = sftmax.log().mul(sftmax).nan_to_num().sum(dim=-1).mul(-1)
+        exit_mask = entr.lt(thr)
+        return exit_mask
+
+    def _thr_compare_(self, exit_track, accu_track,
+            results, gnd_trth, thrs, thr_func):
+        # generate all false mask
+        prev_mask = torch.tensor([False]*self.batch_size,
+                dtype=torch.bool,device=self.device)
+        for i,(exit,thr) in enumerate(zip(results,thrs)):
+            # call function to generate mask
+            exit_mask = thr_func(exit,thr)
+            # mask out values that previously exited
+            exit_mask = exit_mask.logical_and(prev_mask.logical_not())
+            # get number that are exiting here
+            exit_num = exit_mask.sum()
+            # updated the number exiting
+            exit_track.add_val(exit_num,bin_index=i)
+            # update accuracy, along with number exiting here
+            accu_track.update_correct(
+                    exit[exit_mask],gnd_trth[exit_mask],
+                    exit_count=exit_num,bin_index=i)
+            # update exit mask
+            prev_mask = exit_mask
+
     def _test_multi_exit(self):
         self.model.eval()
         self.model.to(self.device)
@@ -68,25 +106,54 @@ class Tester:
             for xb,yb in self.test_dl:
                 xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
+                # accuracy of exits over everything
                 self.accu_track_totl.update_correct(res,yb)
-                for i,(exit,thr) in enumerate(
-                        zip(res,self.top1acc_thresholds)):
-                    ### NOTE DEFINING TOP1 of SOFTMAX DECISION
-                    softmax = nn.functional.softmax(exit,dim=-1)
-                    sftmx_max = torch.max(softmax)
-                    if sftmx_max > thr:
-                        #print("top1 exited at exit {}".format(i))
-                        self.exit_track_top1.add_val(1,i)
-                        self.accu_track_top1.update_correct(exit,yb,bin_index=i)
-                        break
-                for i,(exit,thr) in enumerate(zip(res,self.entropy_thresholds)):
-                    softmax = nn.functional.softmax(exit,dim=-1)
-                    entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
-                    if entr < thr:
-                        #print("entr exited at exit {}".format(i))
-                        self.exit_track_entr.add_val(1,i)
-                        self.accu_track_entr.update_correct(exit,yb,bin_index=i)
-                        break
+                # maximum value of softmax (top1) GREATER than thr
+                self._thr_compare_(self.exit_track_top1,
+                        self.accu_track_top1,
+                        res, yb, self.top1acc_thresholds,
+                        self._thr_max_softmax)
+                # entropy of softmax is LOWER than threshold
+                self._thr_compare_(self.exit_track_entr,
+                        self.accu_track_entr,
+                        res, yb, self.entropy_thresholds,
+                        self._thr_entropy)
+
+                ## generate all false mask
+                #prev_mask = torch.tensor([False]*self.batch_size,
+                #        dtype=torch.bool,device=self.device)
+                #for i,(exit,thr) in enumerate(
+                #        zip(res,self.top1acc_thresholds)):
+                #    ### NOTE DEFINING TOP1 of SOFTMAX DECISION
+                #    sftmax = nn.functional.softmax(exit,dim=-1)
+                #    sftmx_max = torch.max(sftmax,dim=-1).values
+                #    exit_mask = sftmx_max.gt(thr).logical_and(prev_mask.logical_not())
+                #    # get number that are exiting here
+                #    exit_num = exit_mask.sum()
+                #    # updated the number exiting
+                #    self.exit_track_top1.add_val(exit_num,i)
+                #    # update accuracy, along with number exiting here
+                #    self.accu_track_top1.update_correct(exit[exit_mask],
+                #            yb[exit_mask],exit_count=exit_num,bin_index=i)
+                #    # update exit mask
+                #    prev_mask=exit_mask
+
+                ## generate all false mask
+                #prev_mask = torch.tensor([False]*self.batch_size,
+                #        dtype=torch.bool,device=self.device)
+                #for i,(exit,thr) in enumerate(zip(res,self.entropy_thresholds)):
+                #    softmax = nn.functional.softmax(exit,dim=-1)
+                #    entr = softmax.log().mul(softmax).nan_to_num().sum(dim=-1).mul(-1)
+                #    exit_mask = entr.lt(thr).logical_and(prev_mask.logical_not())
+                #    # get number that are exiting here
+                #    exit_num = exit_mask.sum()
+                #    # updated the number exiting
+                #    self.exit_track_entr.add_val(exit_num,i)
+                #    # update accuracy, along with number exiting here
+                #    self.accu_track_entr.update_correct(exit[exit_mask],
+                #            yb[exit_mask],exit_count=exit_num,bin_index=i)
+                #    # update exit mask
+                #    prev_mask=exit_mask
 
     def _test_single_exit(self):
         self.model.eval()
@@ -122,8 +189,8 @@ class Tester:
             self.entr_pc = self.exit_track_entr.get_avg(return_list=True)
             self.top1_accu = self.accu_track_top1.get_accu(return_list=True)
             self.entr_accu = self.accu_track_entr.get_accu(return_list=True)
-            self.top1_accu_tot = np.sum(self.accu_track_top1.val_bins)/self.sample_total
-            self.entr_accu_tot = np.sum(self.accu_track_entr.val_bins)/self.sample_total
+            self.top1_accu_tot = np.sum(self.accu_track_top1.val_bins)/(self.sample_total*self.batch_size)
+            self.entr_accu_tot = np.sum(self.accu_track_entr.val_bins)/(self.sample_total*self.batch_size)
         else:
             self._test_single_exit()
         #accuracy of each exit over FULL data set
