@@ -47,24 +47,9 @@ def base2_softmax_slow(final_layer: torch.Tensor) -> torch.Tensor:
 def base2_softmax_torch(final_layer: torch.Tensor) -> torch.Tensor: 
   # import pdb;pdb.set_trace()
   dev = final_layer.device
-  # final_layer = final_layer.squeeze()
-  
-  
-  # # breakpoint() 
-  # exp_zs = torch.Tensor([quick_exp_float(z.item()) for z in final_layer]).to(final_layer.device)
-  # exp_sum = torch.sum(exp_zs)
-  # # for z in zs:
-  # #   e_z = quick_exp_float(z)
-  # #   exp_sum += e_z
-  # #   exp_zs.append(e_z)
-    
-  # # exp_zs = [z / exp_sum for z in exp_zs]
-  # exp_zs = exp_zs.divide(exp_sum)
-  
-  # print(torch.trunc(final_layer))
   exp_zs = torch.pow(2,torch.trunc(final_layer).to(dev)).to(dev)
   # print(exp_zs)
-  return exp_zs.divide(torch.sum(exp_zs)).to(dev)
+  return exp_zs.divide(torch.sum(exp_zs, dim=-1).unsqueeze(1)).to(dev)
 
 def base2_sub_softmax_torch(final_layer: torch.Tensor) -> torch.Tensor:
   dev = final_layer.device
@@ -93,35 +78,37 @@ def baseE_subMax_softmax_float(final_layer: torch.Tensor) -> list[float]:
   
   return exp_zs
 
-def base2_subMax_softmax_fixed(final_layer: torch.Tensor) -> torch.Tensor: 
+def base2_subMax_softmax_fixed(final_layer: torch.Tensor) -> tuple[np.array, np.array]: 
   LAYER = Fxp(None, signed=True, n_word=16, n_frac=8)
-  EXP   = Fxp(None, signed=False, n_word=2, n_frac=1) # sacrificing many bits 
+  EXP   = Fxp(None, signed=False, n_word=32, n_frac=31) # sacrificing many bits 
   
   
   
-  zs = final_layer.squeeze().cpu().numpy()
+  zs = final_layer.cpu().numpy()
+  
   # convert to fixed point
   fxd_zs = Fxp(zs).like(LAYER)
   
   # max_z = Fxp().like(LAYER)
-  max_z = np.trunc(max(fxd_zs))  
+  num_batches = final_layer.size(dim=0)
+  max_z = np.trunc(np.max(fxd_zs,-1))
+  max_z = np.reshape(max_z, (num_batches,1,))
   
   exp_zs = Fxp(np.array([0])).like(EXP)
   exp_zs.rounding= 'around'
   # exp_sum = Fxp(0).like(EXP)
   fxd_zs = np.trunc(fxd_zs) # use only integer part
   fxd_zs -= max_z
-  # breakpoint()
   
+  # very slow
   exp_zs.equal(Fxp(2, signed=False) ** fxd_zs) 
   
   exp_sum = Fxp(0, signed=False, n_word=36, n_frac=31) 
-  exp_sum.equal(sum(exp_zs))
-  
+  exp_sum.equal(np.sum(exp_zs,-1))
+  exp_sum = np.reshape(exp_sum, (num_batches,1,))
   # exp_zs.equal(exp_zs / exp_sum)
   
-  tmp = torch.Tensor(exp_zs.get_val())
-  tmp /= exp_sum.get_val()
+  # tmp = exp_zs.get_val() / exp_sum.get_val()
   # for i, z in enumerate(fxd_zs):
   #   e_z = Fxp().like(EXP)
   #   e_z.equal(2 ** z) # compute two to the power z
@@ -130,7 +117,7 @@ def base2_subMax_softmax_fixed(final_layer: torch.Tensor) -> torch.Tensor:
     
   # exp_zs = [z / exp_sum for z in exp_zs]
   
-  return tmp
+  return exp_zs, exp_sum
 
 def main():
   

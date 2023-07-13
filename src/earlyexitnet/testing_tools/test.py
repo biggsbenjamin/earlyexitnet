@@ -83,30 +83,14 @@ class Comparison:
             
             exit_result = self.compare_func(result_layer, self.exit_thresholds[exit_b])
             
-            
+            # do this better by indexing into the arrays with the exit_result booleans 
+            # result_layer[exti_result] return a ternsor with only the layers which would've exited
             for batch, isExit in enumerate(exit_result):
                 if isExit and not hasExited[batch]:
                     self.exit_track.add_val(1, exit_b)
                     self.accu_track.update_correct(result_layer[batch], batched_correct_results[batch], bin_index=exit_b)
                     hasExited[batch] = 1
                     exit_counter[exit_b] += 1
-        
-        
-        # print(exit_counter)
-        
-        
-        # compare each batch to compute accuracies
-        
-        # iterate over all batches
-        # batched_results = batched_results.to(torch.device('cpu'))
-        # for i in range(batched_results.size(dim=1)):
-        #     index = torch.Tensor([i]).to(batched_results.device).type(torch.int32)
-        #     # breakpoint()
-        #     result_layer = torch.index_select(batched_results, 1, index) # get specific batch in format [E,C]
-        #     exit_pos, result = self.compare(result_layer)
-            
-        #     self.exit_track.add_val(1, exit_pos)
-        #     self.accu_track.update_correct(result, batched_correct_results[i], bin_index=exit_pos)
         stop = perf_counter()
         
         self.total_time += stop - start
@@ -118,7 +102,7 @@ class Comparison:
         accu_perc = self.accu_track.get_accu(return_list=True)
         print("Exit percentages:", exit_perc)
         print("Accuracy:", accu_perc)
-        print("Total Accuracy:", np.dot(exit_perc, accu_perc))
+        print(f"Total Accuracy: {np.dot(exit_perc, accu_perc):4f}")
         print("Total time:", self.total_time, "s", "Avg time:", self.total_time/num_samples, "s")
         
             # self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
@@ -152,13 +136,13 @@ class Tester:
             #self.entropy_thresholds = [0.025,1000000]
 
             self.comparators = [
-                # Comparison(
-                #     "Entropy",
-                #     self._entropy_comparison,
-                #     Tracker(test_dl.batch_size,exits,self.sample_total),
-                #     AccuTracker(1,exits),
-                #     self.entropy_thresholds
-                # ),            
+                Comparison(
+                    "Entropy",
+                    self._entropy_comparison,
+                    Tracker(test_dl.batch_size,exits,self.sample_total),
+                    AccuTracker(1,exits),
+                    self.entropy_thresholds
+                ),            
                 Comparison(
                     "Softmax",
                     self._softmax_comparison,
@@ -166,20 +150,20 @@ class Tester:
                     AccuTracker(1,exits),
                     self.top1acc_thresholds
                 ),            
-                # Comparison(
-                #     "Quick Base-2 Softmax",
-                #     self._fast_softmax_comparison,
-                #     Tracker(test_dl.batch_size,exits,self.sample_total),
-                #     AccuTracker(1,exits),
-                #     self.top1acc_thresholds
-                # ),
-                # Comparison(
-                #     "Base-2 Sub-Softmax",
-                #     self._base2_sub_softmax_comparison,
-                #     Tracker(test_dl.batch_size,exits,self.sample_total),
-                #     AccuTracker(1,exits),
-                #     self.top1acc_thresholds
-                # ),
+                Comparison(
+                    "Quick Base-2 Softmax",
+                    self._fast_softmax_comparison,
+                    Tracker(test_dl.batch_size,exits,self.sample_total),
+                    AccuTracker(1,exits),
+                    self.top1acc_thresholds
+                ),
+                Comparison(
+                    "Base-2 Sub-Softmax",
+                    self._base2_sub_softmax_comparison,
+                    Tracker(test_dl.batch_size,exits,self.sample_total),
+                    AccuTracker(1,exits),
+                    self.top1acc_thresholds
+                ),
                 ]
 
         #total exit accuracy over the test data
@@ -188,7 +172,7 @@ class Tester:
 
     def _entropy_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
         softmax = nn.functional.softmax(layer,dim=-1)
-        entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
+        entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)), dim=-1)
         return entr < thresh
         
     def _softmax_comparison(self, layer: torch.Tensor, thresh: float) -> torch.Tensor:
@@ -204,18 +188,22 @@ class Tester:
         
         softmax = hw_sim.base2_softmax_torch(layer)
         # softmax = hw_sim.subMax_softmax(exit)            
-        sftmx_max = torch.max(softmax)           
+        sftmx_max = torch.max(softmax, dim=-1).values           
         
         return sftmx_max > thresh
     
     def _base2_sub_softmax_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
         
-        softmax = hw_sim.base2_subMax_softmax_fixed(layer)
+        exp, sums = hw_sim.base2_subMax_softmax_fixed(layer)
         # softmax = hw_sim.subMax_softmax(exit)            
-        sftmx_max = torch.max(softmax)           
-        breakpoint()
+        # sftmx_max = torch.max(softmax, dim=-1).values       
         
-        return sftmx_max > thresh
+        max_exp = np.max(exp,-1)
+        
+        threshes = (sums * thresh).flatten()
+        
+        # breakpoint()
+        return torch.Tensor(max_exp > threshes)
 
     def _test_multi_exit(self):
         self.model.eval()
