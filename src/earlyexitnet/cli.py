@@ -117,23 +117,22 @@ def test(datacoll,model,exits,loss_f,
     stop = perf_counter()
     elapsed_time = stop-start
     
-    print("### TEST FINISHED ###")
-    print("Time elapsed:", elapsed_time, "s")
     print("top1 thrs: {},  entropy thrs: {}".format(top1_thr, entr_thr))
+    print("Total time elapsed:", elapsed_time, "s")
     
     #get test results
-    test_size = net_test.sample_total
-    top1_pc = net_test.top1_pc
-    entropy_pc = net_test.entr_pc
-    top1acc = net_test.top1_accu
-    entracc = net_test.entr_accu
-    t1_tot_acc = net_test.top1_accu_tot
-    ent_tot_acc = net_test.entr_accu_tot
-    full_exit_accu = net_test.full_exit_accu
+    # test_size = net_test.sample_total
+    # top1_pc = net_test.top1_pc
+    # entropy_pc = net_test.entr_pc
+    # top1acc = net_test.top1_accu
+    # entracc = net_test.entr_accu
+    # t1_tot_acc = net_test.top1_accu_tot
+    # ent_tot_acc = net_test.entr_accu_tot
+    # full_exit_accu = net_test.full_exit_accu
     
-    fast_pc = net_test.fast_pc
-    fast_accu = net_test.fast_accu
-    fast_tot_acc = net_test.fast_accu_tot
+    # fast_pc = net_test.fast_pc
+    # fast_accu = net_test.fast_accu
+    # fast_tot_acc = net_test.fast_accu_tot
     
     #get percentage exits and avg accuracies, add some timing etc.
     # print("top1 exit %s {},  entropy exit %s {},  fast exit %s {}".format(top1_pc, entropy_pc, fast_pc))
@@ -143,24 +142,24 @@ def test(datacoll,model,exits,loss_f,
     # print("top1 acc % {}, entr acc % {}, fast acc % {}".format(t1_tot_acc,ent_tot_acc,fast_tot_acc))
     # print("Accuracy of the individual exits over full set: {}".format(full_exit_accu))
 
-    ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
-    with open(notes_path, 'a') as notes:
-        notes.write("\n#######################################\n")
-        notes.write(f"\nTesting results: for {args.model_name} @ {ts}\n  ")
-        notes.write(f"on dataset {args.dataset}\n")
-        notes.write("Test sample size: {}\n".format(test_size))
-        notes.write("top1 thrs: {},  entropy thrs: {}\n".format(top1_thr, entr_thr))
-        notes.write("top1 exit %s {}, entropy exit %s {}\n".format(top1_pc, entropy_pc))
-        notes.write("best* model "+save_path+"\n")
-        notes.write("Accuracy over exited samples:\n")
-        notes.write("top1 exit acc % {}, entropy exit acc % {}\n".format(top1acc, entracc))
-        notes.write("Accuracy over EE network:\n")
-        notes.write("top1 acc % {}, entr acc % {}\n".format(t1_tot_acc,ent_tot_acc))
-        notes.write("Accuracy of the individual exits over full set: {}\n".format(full_exit_accu))
+    # ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
+    # with open(notes_path, 'a') as notes:
+    #     notes.write("\n#######################################\n")
+    #     notes.write(f"\nTesting results: for {args.model_name} @ {ts}\n  ")
+    #     notes.write(f"on dataset {args.dataset}\n")
+    #     notes.write("Test sample size: {}\n".format(test_size))
+    #     notes.write("top1 thrs: {},  entropy thrs: {}\n".format(top1_thr, entr_thr))
+    #     notes.write("top1 exit %s {}, entropy exit %s {}\n".format(top1_pc, entropy_pc))
+    #     notes.write("best* model "+save_path+"\n")
+    #     notes.write("Accuracy over exited samples:\n")
+    #     notes.write("top1 exit acc % {}, entropy exit acc % {}\n".format(top1acc, entracc))
+    #     notes.write("Accuracy over EE network:\n")
+    #     notes.write("top1 acc % {}, entr acc % {}\n".format(t1_tot_acc,ent_tot_acc))
+    #     notes.write("Accuracy of the individual exits over full set: {}\n".format(full_exit_accu))
 
-        if args.run_notes is not None:
-            notes.write(args.run_notes+"\n")
-    notes.close()
+    #     if args.run_notes is not None:
+    #         notes.write(args.run_notes+"\n")
+    # notes.close()
 
 """
 Main training and testing function run from the cli

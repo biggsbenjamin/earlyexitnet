@@ -142,15 +142,17 @@ class B_Lenet(nn.Module):
             top1 = torch.max(pk) #x)
             return top1 > self.exit_threshold
 
-    # @torch.jit.unused #decorator to skip jit comp
     def _forward_training(self, x):
-        #TODO make jit compatible - not urgent
-        #broken because returning list()
         res = None
+        num_batch = x.size(0)
         for bb, ee in zip(self.backbone, self.exits):
             x = bb(x)
-            # res.append(ee(x))
-            res = ee(x) if res is None else torch.stack((res,ee(x)))
+            tmp = ee(x)
+            num_classes = tmp.size(1)
+            
+            tmp = tmp.reshape(num_batch, 1, num_classes) # resize from [B, C] to [B, 1, C] to then stack it along the second dimension
+            res = tmp if res is None else torch.cat((res,tmp), dim=1)
+        
         return res
 
     def forward(self, x):

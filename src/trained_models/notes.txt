@@ -673,3 +673,8 @@ Accuracy over EE network:
 top1 acc % None, entr acc % None
 Accuracy of the individual exits over full set: [0.0, 0.0]
 run notes example
+
+#######################################
+
+Testing results: for b_lenet_se @ 2023-07-12_151701
+  on dataset mnist

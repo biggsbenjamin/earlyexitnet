@@ -217,8 +217,9 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
     def add_vals(self,val_array): #list of lists
         # [[bin0,bin1,...,binN],[bin0,bin1,...,binN],...,lossN]
         #convert to numpy array and sum across val dimension
+        
         self.set_length_accum = np.full((self.bin_num,), len(val_array))
-        self.val_bins = np.sum(np.array(val_array), axis=0)
+        self.val_bins += np.sum(np.array(val_array), axis=0)
         assert self.val_bins.shape[0] == self.bin_num,\
                 f"bin mismatch {self.bin_num} with incoming array{self.val_bins.shape}"
 
@@ -234,7 +235,7 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         self._init_vars(batch_size,bins,set_length)
 
     ### stat functions ###
-    def get_avg(self,return_list=False): #mean average
+    def get_avg(self,return_list=False): #mean average        
         if self.set_length is not None:
             #for i,length in enumerate(self.set_length_accum):
             #    assert self.set_length == length,\
@@ -277,6 +278,7 @@ class AccuTracker(Tracker):
             ):
         #init vars
         super().__init__(batch_size,bins,set_length)
+        
     def _init_vars(self, #NOTE can you overloaded parent function
             batch_size,
             bins,
@@ -287,14 +289,14 @@ class AccuTracker(Tracker):
         self.set_length = set_length
         #init bins
         self.bin_num = bins
-        self.val_bins = np.zeros(bins,dtype=int)
+        self.val_bins = np.zeros(bins,dtype=np.float64)
         self.set_length_accum = np.zeros(bins,dtype=int)
     def get_num_correct(self, preds, labels):
-        #predictions from model (not one hot), correct labels
+        #predictions from model (not one hot), correct labels        
         return preds.argmax().eq(labels).sum().item()
 
     ### functions to use ###
-    def update_correct(self,result,label,bin_index=None): #for single iteration
+    def update_correct(self,result,label,bin_index=None): #for single iteration        
         if bin_index is None and len(result) > 1 and self.bin_num > 1:
             count = [self.get_num_correct(val,label) for val in result]
         else:
@@ -302,14 +304,15 @@ class AccuTracker(Tracker):
                 count = self.get_num_correct(result[0],label)
             else:
                 count = self.get_num_correct(result,label)
+    
         super().add_val(count,bin_index)
 
     def update_correct_list(self,res_list,lab_list=None): #list of lists of lists
         # [[bin0,bin1,...,binN],[bin0,bin1,...,binN],...,sampN], [label0,...labelN]
         if lab_list is not None:
             assert len(res_list) == len(lab_list), "AccuTracker: sample size mismatch"
-            super().add_vals([[self.get_num_correct(res,label) for res in results]
-                                        for label,results in zip(lab_list,res_list)])
+            results = [[self.get_num_correct(res,label) for res in results] for label,results in zip(lab_list,res_list)]
+            super().add_vals(results)
         else:
             super().add_vals(res_list)
     def get_accu(self,return_list=False):
