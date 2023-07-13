@@ -43,15 +43,7 @@ class Comparison:
         self.exit_thresholds = exit_thresholds
         
         self.total_time = 0
-    
-    # def compare(self, batched_results: torch.Tensor) -> tuple[int, torch.Tensor]:
-        
 
-        
-    #     # for exit_pos, (exit_layer,thr) in enumerate(zip(results,self.exit_thresholds)):
-    #     #     if self.compare_func(exit_layer, thr):
-    #     #         return (exit_pos, exit_layer)
-    
     def eval(self, batched_results: torch.Tensor, batched_correct_results: torch.Tensor):
         # FAILED BECAUSE CONDITIONAL OPERATIONS ARE NOT SUPPORTED
         # batched results is batched along the second dimension [num_exits, batch_size, num_classes]
@@ -151,8 +143,15 @@ class Tester:
                     self.top1acc_thresholds
                 ),            
                 Comparison(
-                    "Quick Base-2 Softmax",
+                    "Trunc Base-2 Softmax",
                     self._fast_softmax_comparison,
+                    Tracker(test_dl.batch_size,exits,self.sample_total),
+                    AccuTracker(1,exits),
+                    self.top1acc_thresholds
+                ),
+                Comparison(
+                    "Non-Trunc Base-2 Softmax",
+                    self._base2_softmax_comparison,
                     Tracker(test_dl.batch_size,exits,self.sample_total),
                     AccuTracker(1,exits),
                     self.top1acc_thresholds
@@ -187,6 +186,14 @@ class Tester:
     def _fast_softmax_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
         
         softmax = hw_sim.base2_softmax_torch(layer)
+        # softmax = hw_sim.subMax_softmax(exit)            
+        sftmx_max = torch.max(softmax, dim=-1).values           
+        
+        return sftmx_max > thresh
+    
+    def _base2_softmax_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
+        
+        softmax = hw_sim.nonTrunc_base2_softmax_torch(layer)
         # softmax = hw_sim.subMax_softmax(exit)            
         sftmx_max = torch.max(softmax, dim=-1).values           
         

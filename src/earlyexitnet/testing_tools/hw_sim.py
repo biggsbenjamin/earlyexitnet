@@ -51,6 +51,14 @@ def base2_softmax_torch(final_layer: torch.Tensor) -> torch.Tensor:
   # print(exp_zs)
   return exp_zs.divide(torch.sum(exp_zs, dim=-1).unsqueeze(1)).to(dev)
 
+def nonTrunc_base2_softmax_torch(final_layer: torch.Tensor) -> torch.Tensor: 
+  # import pdb;pdb.set_trace()
+  dev = final_layer.device
+  exp_zs = torch.pow(2,final_layer).to(dev)
+  # print(exp_zs)
+  return exp_zs.divide(torch.sum(exp_zs, dim=-1).unsqueeze(1)).to(dev)
+
+
 def base2_sub_softmax_torch(final_layer: torch.Tensor) -> torch.Tensor:
   dev = final_layer.device
   
@@ -79,8 +87,10 @@ def baseE_subMax_softmax_float(final_layer: torch.Tensor) -> list[float]:
   return exp_zs
 
 def base2_subMax_softmax_fixed(final_layer: torch.Tensor) -> tuple[np.array, np.array]: 
+  NUM_EXP_BITS = 4
+  
   LAYER = Fxp(None, signed=True, n_word=16, n_frac=8)
-  EXP   = Fxp(None, signed=False, n_word=32, n_frac=31) # sacrificing many bits 
+  EXP   = Fxp(None, signed=False, n_word=NUM_EXP_BITS, n_frac=NUM_EXP_BITS-1) # sacrificing many bits 
   
   
   
@@ -94,28 +104,20 @@ def base2_subMax_softmax_fixed(final_layer: torch.Tensor) -> tuple[np.array, np.
   max_z = np.trunc(np.max(fxd_zs,-1))
   max_z = np.reshape(max_z, (num_batches,1,))
   
-  exp_zs = Fxp(np.array([0])).like(EXP)
+  exp_zs = Fxp(np.ones(fxd_zs.shape)).like(EXP)
   exp_zs.rounding= 'around'
   # exp_sum = Fxp(0).like(EXP)
   fxd_zs = np.trunc(fxd_zs) # use only integer part
-  fxd_zs -= max_z
+  fxd_zs -= max_z  # now all elements are 0 or negative
+  exponents = abs(fxd_zs.get_val())  # make all values positive
   
-  # very slow
-  exp_zs.equal(Fxp(2, signed=False) ** fxd_zs) 
+  # shift the underlying representation of the numbers
+  # in this way the exponentiation is computer
+  exp_zs.val >>= exponents.astype(np.uint64)   
   
   exp_sum = Fxp(0, signed=False, n_word=36, n_frac=31) 
   exp_sum.equal(np.sum(exp_zs,-1))
   exp_sum = np.reshape(exp_sum, (num_batches,1,))
-  # exp_zs.equal(exp_zs / exp_sum)
-  
-  # tmp = exp_zs.get_val() / exp_sum.get_val()
-  # for i, z in enumerate(fxd_zs):
-  #   e_z = Fxp().like(EXP)
-  #   e_z.equal(2 ** z) # compute two to the power z
-  #   exp_sum += e_z
-  #   exp_zs.append(e_z)
-    
-  # exp_zs = [z / exp_sum for z in exp_zs]
   
   return exp_zs, exp_sum
 
