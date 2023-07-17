@@ -209,17 +209,21 @@ def train_n_test(args):
         exit_epochs=args.ex_epochs,
         joint_epochs=args.jt_epochs,
         device=device,
-        pretrained_path=args.trained_model_path
+        pretrained_path=args.trained_model_path,
+        validation_frequency=args.validation_frequency
     )
     if exits > 1:
         best,last=net_trainer.train_joint(pretrain_backbone=pretrain_backbone)
     else:
+        if args.select_optimiser is not 'adam':
+            print(f"WARNING: Using {args.select_optimiser} instead of adam")
         ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
         intr_path = f'bb_only_time_{ts}'
         print("Saving to:",intr_path)
         # training backbone only using same method
         best,last=net_trainer.train_backbone(
-            internal_folder=intr_path)
+            internal_folder=intr_path,
+            opt_name=args.select_optimiser)
     # get path to network savepoints
     save_path = os.path.split(last)[0]
     #save some notes about the run
@@ -228,11 +232,20 @@ def train_n_test(args):
         notes.write("bb epochs {}, jt epochs {}\n".format(args.bb_epochs, args.jt_epochs))
         notes.write("Training batch size {}, Test batchsize {}\n".format(batch_size_train,
                                                                        batch_size_test))
+        notes.write(f"Optimiser info: {args.select_optimiser}\n")
+        notes.write(f"Dataset: {args.dataset}\n")
         # record exit weighting (if model has it)
         if hasattr(net_trainer.model,'exit_loss_weights'):
             notes.write("model training exit weights:"+str(net_trainer.model.exit_loss_weights)+"\n")
         notes.write("Path to last model:"+str(last)+"\n")
         notes.write("Path to best model:"+str(best)+"\n")
+        # store backbone training data, NOTE for now, just for resnet
+        notes.write(f"bb_train_epcs: {net_trainer.bb_train_epcs}\n")
+        notes.write(f"bb_train_loss: {net_trainer.bb_train_loss}\n")
+        notes.write(f"bb_train_accu: {net_trainer.bb_train_accu}\n")
+        notes.write(f"bb_valid_epcs: {net_trainer.bb_valid_epcs}\n")
+        notes.write(f"bb_valid_loss: {net_trainer.bb_valid_loss}\n")
+        notes.write(f"bb_valid_accu: {net_trainer.bb_valid_accu}\n")
     notes.close()
 
     #TODO graph training data
@@ -263,7 +276,8 @@ def main():
                         'brnsecond',
                         'backbone_se',
                         'b_lenet_cifar',
-                        'resnet8'
+                        'resnet8',
+                        'resnet8_bb'
                         ],
             required=True, help='select the model name')
 
@@ -279,6 +293,12 @@ def main():
             help='epochs to train exits jointly with backbone')
     parser.add_argument('-exe','--ex_epochs', metavar='n',type=int, default=0, required=False,
             help='epochs to train exits with frozen backbone')
+    parser.add_argument('-vf','--validation_frequency',type=int,default=1,required=False,
+            help='Validation and save frequency. Number of epochs to wait for before valid,saving.')
+    # opt selection
+    parser.add_argument('-so','--select_optimiser',type=str,default='adam',required=False,
+            help='Select between the adam opt (for small branchynet) and SGD for resnet')
+    # run notes
     parser.add_argument('-rn', '--run_notes', type=str, required=False,
             help='Some notes to add to the train/test information about the model or otherwise')
 
@@ -343,8 +363,6 @@ def main():
         to_onnx(model,shape,batch_size=1,
                 path=args.generate_onnx,
                 fname=fname)
-
-
 
 if __name__ == "__main__":
     main()
