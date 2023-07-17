@@ -65,6 +65,13 @@ This sets the top1 (maximum softmax) threshold to 0.75 and the entropy threshold
 
 TBD
 
+### Training ResNet8 backbone
+
+`python -m earlyexitnet.cli -m resnet8_bb -bbe 10 -vf 5 -d cifar10 -rn "testing resnet8 with batchnorm" -so sgd`
+
+Where `-so` is select optimiser. The current default can be found in the training class. 
+`-vf` is the frequency at which to perform a validation run and save the model.
+
 ## Getting visual representation of the onnx graph
 Use [netron](ihttps://netron.app/) viewer
 

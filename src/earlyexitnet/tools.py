@@ -167,7 +167,8 @@ class CIFAR10DataColl(DataColl):
         tfs_list = tfs_list + [transforms.RandomHorizontalFlip(),
                 transforms.RandomRotation(degrees=10),
                 transforms.ColorJitter(brightness=0.5),
-                transforms.Normalize(mean=mean,std=std)]
+                #transforms.Normalize(mean=mean,std=std)
+                ]
         self.tfs_train = transforms.Compose(tfs_list)
         #full training set
         self.full_train_set = torchvision.datasets.CIFAR10('../data/cifar10',
@@ -176,7 +177,7 @@ class CIFAR10DataColl(DataColl):
         tfs_test_list = [transforms.ToTensor()]
         if self.no_scaling:
             tfs_test_list.append(custom_trfm)
-        tfs_test_list.append(transforms.Normalize(mean=mean,std=std))
+        #tfs_test_list.append(transforms.Normalize(mean=mean,std=std))
         self.tfs_test = transforms.Compose(tfs_test_list)
         #full testing set
         self.full_test_set = torchvision.datasets.CIFAR10('../data/cifar10',
@@ -321,7 +322,10 @@ class AccuTracker(Tracker):
         return preds.argmax(dim=1).eq(labels).sum().item()
 
     ### functions to use ###
-    def add_val(self,value,exit_count=1,bin_index=None): #adds val(s) for single iteration
+    def add_val(self,value,accum_count=None,bin_index=None):
+        if accum_count is None:
+            accum_count = self.batch_size
+        #adds val(s) for single iteration
         if isinstance(value,list):
             assert len(value) == self.bin_num, "val list length mismatch {} to {}".format(
                                                                 len(value),self.bin_num)
@@ -336,10 +340,13 @@ class AccuTracker(Tracker):
         elif bin_index is not None:
             assert bin_index < self.bin_num, "index out of range for adding individual loss"
         self.val_bins[bin_index] += value
-        self.set_length_accum[bin_index] += exit_count
+        self.set_length_accum[bin_index] += accum_count
         return
 
-    def update_correct(self,result,label,exit_count=1,bin_index=None): #for single iteration
+    def update_correct(self,result,label,
+            accum_count=None,bin_index=None): #for single iteration
+        if accum_count is None:
+            accum_count = self.batch_size
         if bin_index is None and len(result) > 1 and self.bin_num > 1:
             count = [self.get_num_correct(val,label) for val in result]
         else:
@@ -347,7 +354,7 @@ class AccuTracker(Tracker):
                 count = self.get_num_correct(result[-1],label)
             else:
                 count = self.get_num_correct(result,label)
-        self.add_val(count,exit_count,bin_index)
+        self.add_val(count,accum_count,bin_index)
 
     def update_correct_list(self,res_list,lab_list=None): #list of lists of lists
         # [[bin0,bin1,...,binN],[bin0,bin1,...,binN],...,sampN], [label0,...labelN]
