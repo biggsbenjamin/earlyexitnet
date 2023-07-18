@@ -21,9 +21,12 @@ import torch.nn as nn
 import torch
 # general imports
 import os
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta
+
 from time import perf_counter
 import json
+from tqdm import tqdm
+import numpy as np
 
 
 def get_exits(model_str):
@@ -72,56 +75,95 @@ def test_only(args):
             os.path.split(args.trained_model_path)[0],'notes.txt')
     else:
         notes_path = args.notes_path
-    # path to the model (already trained)
-    save_path = args.trained_model_path
-    # RUN THE MODEL OVER TEST DATASET
-    test(datacoll,model,exits,loss_f,save_path,notes_path,args)
+        
+        
+    if args.threshold_range is not None and args.threshold_step is not None:
+        if len(args.threshold_range) == 2:
+            test_multiple(datacoll,model,exits,loss_f,notes_path,args)
+        else:
+            raise NameError("Invalid amount of value for the threshold range:", len(args.threshold_range))
+    else:
+        # RUN THE MODEL OVER TEST DATASET
+        test(datacoll,model,exits,loss_f,notes_path,args)
 
-def test(datacoll,model,exits,loss_f,
-         save_path,notes_path,args):
+def test_multiple(datacoll,model,exits,loss_f,notes_path,args):
+    step = args.threshold_step
+    min_thr, max_thr = args.threshold_range
+    
+    num_tests = int((max_thr - min_thr)/step)  
+    total_time = 0
+    running_time = 0
+    
+    results = []
+    
+    for i, thresh in enumerate(np.arange(min_thr, max_thr, step)):
+        rt_string = dt.utcfromtimestamp(timedelta(seconds=int(running_time)).total_seconds()).strftime("%M:%S")
+        tt_string = dt.utcfromtimestamp(timedelta(seconds=total_time).total_seconds()).strftime("%M:%S")
+        print(f"\nRunning test {i}/{num_tests}, thresh: {thresh} \t\t [{rt_string}/{tt_string}]")
+        
+        elapsed_time, test_stats = run_test(datacoll,model,exits,[float(thresh)], None,loss_f,args) # ignore entropy threshold
+
+        results.append(test_stats)
+        
+        running_time += elapsed_time
+        total_time = int((float(running_time) / (i+1)) * num_tests)
+
+    ts = dt.now().strftime("%y-%m-%d_%H%M%S")
+    
+    final_object = {}
+    final_object["model"] = args.model_name
+    final_object["dataset"] = args.dataset
+    final_object["thresholds"] = {"min_thr":min_thr, "max_thr":max_thr, "step":step}
+    
+    final_object["test_vals"] = results
+    
+    save_path = f"{args.model_name}_{ts}.json"
+    
+    with open(save_path, 'a') as output:
+        output.write(json.dumps(final_object, indent=2))
+
+
+def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args):
     # Device setup
     if torch.cuda.is_available() and args.gpu_target is not None:
         device = torch.device(f"cuda:{args.gpu_target}")
     else:
         device = torch.device("cpu")
-    print("Device:", device)
-    # check if there are thresholds provided
-    if args.top1_threshold is None and \
-            args.entr_threshold is None:
+    # print("Device:", device)
+
+    if top1_thr is None and entr_thr is None:
         # no thresholds provided, skip testing
         print("WARNING: No Thresholds provided, skipping testing.")
         return
-    elif args.top1_threshold is None:
+    elif top1_thr is None:
         # set useless threshold
-        args.top1_threshold=0
-    elif args.entr_threshold is None:
+        top1_thr=[0]
+    elif entr_thr is None:
         # set useless threshold
-        args.entr_threshold=1000000
+        entr_thr=[1000000]
     # set up test class then write results
-    test_dl = datacoll.get_test_dl()
     if exits>1:
-        if len(args.top1_threshold)+1 != exits or \
-            len(args.entr_threshold)+1 != exits:
-                raise ValueError(f"Not enough arguments for threshold. Expecting {exits-1}")
+        if len(top1_thr)+1 != exits or len(entr_thr)+1 != exits:
+            raise ValueError(f"Not enough arguments for threshold. Expecting {exits-1}")
         # Adding final exit thr - must exit here so tiny/huge depending on criteria
-        top1_thr = args.top1_threshold
         top1_thr.append(0)
-        entr_thr = args.entr_threshold
         entr_thr.append(1000000)
-        # Creating Tester object
-        net_test = Tester(model,test_dl,loss_f,exits,
-                top1_thr,entr_thr,args.confidence_function,device)
-    else:
-        net_test = Tester(model,test_dl,loss_f,exits,comp_funcs=args.confidence_function,device=device)
 
-    top1_thr = net_test.top1acc_thresholds
-    entr_thr = net_test.entropy_thresholds
+    test_dl = datacoll.get_test_dl()
+    net_test = Tester(model,test_dl,loss_f,exits, top1_thr,entr_thr,args.confidence_function,device)
+
     start = perf_counter()
     net_test.test()
     stop = perf_counter()
     elapsed_time = stop-start
+
+    return elapsed_time, net_test.get_stats()
+
+def test(datacoll,model,exits,loss_f,notes_path,args):
+
+    elapsed_time, test_stats = run_test(datacoll,model,exits,args.top1_threshold, args.entr_threshold,loss_f,args)
     
-    print("top1 thrs: {},  entropy thrs: {}".format(top1_thr, entr_thr))
+    print("top1 thrs: {},  entropy thrs: {}".format(args.top1_threshold, args.entr_threshold))
     print("Total time elapsed:", elapsed_time, "s")
     
     ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
@@ -130,7 +172,6 @@ def test(datacoll,model,exits,loss_f,
         notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
         notes.write(f"on dataset {args.dataset}\n")
         
-        test_stats = net_test.get_stats()
         test_stats['datetime'] = ts
         
         # notes.write("JSON data:\n")
@@ -230,7 +271,7 @@ def train_n_test(args):
     #separate graphs for pre training and joint training
 
     #once trained, run it on the test data
-    test(datacoll,net_trainer.model,exits,loss_f,save_path,notes_path,args)
+    test(datacoll,net_trainer.model,exits,loss_f,notes_path,args)
 
 
 def path_check(string): #checks for valid path
@@ -300,6 +341,9 @@ def main():
     #threshold inputs for testing, 1 or more args - user should know model
     parser.add_argument('-t1','--top1_threshold', nargs='+',type=float,required=False)
     parser.add_argument('-entr','--entr_threshold', nargs='+',type=float,required=False)
+    
+    parser.add_argument('-tr', '--threshold_range', nargs='+', type=float, required=False)
+    parser.add_argument('-ts', '--threshold_step', type=float, required=False)
 
     #TODO arguments to add
         #training loss function
