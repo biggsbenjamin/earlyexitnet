@@ -133,8 +133,8 @@ def test(datacoll,model,exits,loss_f,
         test_stats = net_test.get_stats()
         test_stats['datetime'] = ts
         
-        notes.write("JSON data:\n")
-        pretty = json.dumps(test_stats, indent=2)
+        # notes.write("JSON data:\n")
+        pretty = json.dumps(test_stats)
         notes.write(pretty)
         notes.write('\n')
 
