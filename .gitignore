@@ -16,3 +16,5 @@ net_graph.jpg.pdf
 build/
 .eggs/
 *.egg-info/
+
+*.json

@@ -123,7 +123,7 @@ def test_multiple(datacoll,model,exits,loss_f,notes_path,args):
         output.write(json.dumps(final_object, indent=2))
 
 
-def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args):
+def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = False):
     # Device setup
     if torch.cuda.is_available() and args.gpu_target is not None:
         device = torch.device(f"cuda:{args.gpu_target}")
@@ -150,7 +150,7 @@ def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args):
         entr_thr.append(1000000)
 
     test_dl = datacoll.get_test_dl()
-    net_test = Tester(model,test_dl,loss_f,exits, top1_thr,entr_thr,args.confidence_function,device)
+    net_test = Tester(model,test_dl,loss_f,exits, top1_thr,entr_thr,args.confidence_function,device, save_raw)
 
     start = perf_counter()
     net_test.test()
@@ -161,8 +161,10 @@ def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args):
 
 def test(datacoll,model,exits,loss_f,notes_path,args):
 
-    elapsed_time, test_stats = run_test(datacoll,model,exits,args.top1_threshold, args.entr_threshold,loss_f,args)
-    
+    save_raw = True
+
+    elapsed_time, test_stats = run_test(datacoll,model,exits,args.top1_threshold, args.entr_threshold,loss_f,args,save_raw)
+        
     print("top1 thrs: {},  entropy thrs: {}".format(args.top1_threshold, args.entr_threshold))
     print("Total time elapsed:", elapsed_time, "s")
     
@@ -172,16 +174,28 @@ def test(datacoll,model,exits,loss_f,notes_path,args):
         notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
         notes.write(f"on dataset {args.dataset}\n")
         
-        test_stats['datetime'] = ts
-        
         # notes.write("JSON data:\n")
-        pretty = json.dumps(test_stats)
-        notes.write(pretty)
-        notes.write('\n')
+        # pretty = json.dumps(test_stats)
+        # notes.write(pretty)
+        # notes.write('\n')
 
         if args.run_notes is not None:
             notes.write(args.run_notes+"\n")
     notes.close()
+    
+    final_object = {}
+    final_object["model"] = args.model_name
+    final_object["dataset"] = args.dataset
+    
+    final_object["test_vals"] = test_stats
+    
+    save_path = f"{args.model_name}_singleThresh_{ts}.json"
+    
+    with open(save_path, 'a') as output:
+        if save_raw:
+            output.write(json.dumps(final_object))
+        else:
+            output.write(json.dumps(final_object, indent=2))
 
 """
 Main training and testing function run from the cli
