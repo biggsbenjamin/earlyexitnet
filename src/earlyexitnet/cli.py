@@ -161,7 +161,7 @@ def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = Fals
 
 def test(datacoll,model,exits,loss_f,notes_path,args):
 
-    save_raw = True
+    save_raw = args.save_raw_softmax
 
     elapsed_time, test_stats = run_test(datacoll,model,exits,args.top1_threshold, args.entr_threshold,loss_f,args,save_raw)
         
@@ -169,19 +169,19 @@ def test(datacoll,model,exits,loss_f,notes_path,args):
     print("Total time elapsed:", elapsed_time, "s")
     
     ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
-    with open(notes_path, 'a') as notes:
-        notes.write("\n#######################################\n")
-        notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
-        notes.write(f"on dataset {args.dataset}\n")
+    # with open(notes_path, 'a') as notes:
+    #     notes.write("\n#######################################\n")
+    #     notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
+    #     notes.write(f"on dataset {args.dataset}\n")
         
-        # notes.write("JSON data:\n")
-        # pretty = json.dumps(test_stats)
-        # notes.write(pretty)
-        # notes.write('\n')
+    #     # notes.write("JSON data:\n")
+    #     # pretty = json.dumps(test_stats)
+    #     # notes.write(pretty)
+    #     # notes.write('\n')
 
-        if args.run_notes is not None:
-            notes.write(args.run_notes+"\n")
-    notes.close()
+    #     if args.run_notes is not None:
+    #         notes.write(args.run_notes+"\n")
+    # notes.close()
     
     final_object = {}
     final_object["model"] = args.model_name
@@ -358,6 +358,9 @@ def main():
     
     parser.add_argument('-tr', '--threshold_range', nargs='+', type=float, required=False)
     parser.add_argument('-ts', '--threshold_step', type=float, required=False)
+    
+    parser.add_argument('-sr', '--save_raw_softmax', type=bool, default=False, required=False, 
+                        help="Save the value of the softmax outputs")
 
     #TODO arguments to add
         #training loss function

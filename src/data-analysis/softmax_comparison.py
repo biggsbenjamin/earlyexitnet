@@ -24,7 +24,7 @@ for row, function in enumerate(data['test_vals']['comps']):
   
   sftmx = function['raw_softmax']
   name = function['name']
-  fig, axis = plt.subplots(ncols=num_exits, sharey=True)
+  fig, axis = plt.subplots(nrows=num_exits, sharey=True)
   
   fig.suptitle(name)
   
@@ -40,16 +40,19 @@ for row, function in enumerate(data['test_vals']['comps']):
     correct_vals = softmax[correctness]
     wrong_vals = softmax[np.invert(correctness)]
     
-    logbins = np.logspace(np.log10(0.5),np.log10(1),100)
-    # logbins = np.linspace(0.5, 1, 200)
+    logbins = np.logspace(np.log10(0.1),np.log10(1),200)
     
+    if name == "Base-2 Sub-Softmax":
+      logbins = np.logspace(np.log10(0.1), np.log10(1), 32)
+       
     quants = [0.25, 0.5, 0.75]
     quantiles = mstats.mquantiles(wrong_vals, prob=quants)
     for i, q in enumerate(quantiles):
       ax.axvline(q, 0, color='b', ls='--', label=f"q {quants[i]*100:.0f}%: {q:.02f}")
     
-    ax.hist(correct_vals, bins=logbins, label=f'correct {correct_vals.shape[0]}')
+    ax.hist(correct_vals, bins=logbins, stacked=True,label=f'correct {correct_vals.shape[0]}')
     ax.hist(wrong_vals, bins=logbins, stacked=True, label=f'incorrect {wrong_vals.shape[0]}')
+    
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel('threshold value')
