@@ -156,7 +156,6 @@ class B_Lenet(nn.Module):
 
     def forward(self, x):
         #std forward function - add var to distinguish be test and inf
-
         if self.fast_inference_mode:
             for bb, ee in zip(self.backbone, self.exits):
                 x = bb(x)
@@ -267,6 +266,7 @@ class B_Lenet_se(B_Lenet):
 #cifar10 version - harder data set
 class B_Lenet_cifar(B_Lenet_fcn):
     def _build_backbone(self):
+    
         #NOTE changed padding from 4 to 2
         # changed input number of channels to be 3
         strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=2)
