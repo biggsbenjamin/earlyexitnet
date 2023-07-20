@@ -293,7 +293,7 @@ class AccuTracker(Tracker):
         self.set_length_accum = np.zeros(bins,dtype=int)
     def get_num_correct(self, preds, labels):
         #predictions from model (not one hot), correct labels        
-        return preds.argmax().eq(labels).sum().item()
+        return preds.argmax(dim=-1).eq(labels).sum().item()
 
     ### functions to use ###
     def update_correct(self,result,label,bin_index=None): #for single iteration        
@@ -310,9 +310,10 @@ class AccuTracker(Tracker):
     def update_correct_list(self,res_list,lab_list=None): #list of lists of lists
         # [[bin0,bin1,...,binN],[bin0,bin1,...,binN],...,sampN], [label0,...labelN]
         if lab_list is not None:
-            assert len(res_list) == len(lab_list), "AccuTracker: sample size mismatch"
-            results = [[self.get_num_correct(res,label) for res in results] for label,results in zip(lab_list,res_list)]
-            super().add_vals(results)
+            assert len(res_list[0]) == len(lab_list), "AccuTracker: sample size mismatch"
+            # results = [[self.get_num_correct(res,label) for res in results] for label,results in zip(lab_list,res_list)] old
+            results = [self.get_num_correct(exit_layer, lab_list) for exit_layer in res_list]
+            super().add_val(results)
         else:
             super().add_vals(res_list)
     def get_accu(self,return_list=False):

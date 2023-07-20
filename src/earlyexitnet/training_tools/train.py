@@ -166,6 +166,7 @@ class Trainer:
         self.train_loss_trk.add_loss(loss.item())
         self.train_accu_trk.update_correct(
             results[-1],yb)
+        
     def _val_loop_get_best_ex(self,val_loss_avg,val_accu_avg,savepoint):
         el_total=0.0
         bl_total=0.0

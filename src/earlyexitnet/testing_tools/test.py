@@ -66,8 +66,8 @@ class Comparison:
         # batched_compare_func = functorch.vmap(self.compare_func, in_dims=(0,None), out_dims=(0, None)) # ([B,C], float) -> [B, 1] instead of ([C], float) -> [1]
 
 
-        num_batches = batched_results.size(dim=0)
-        num_exits = batched_results.size(dim=1)
+        num_batches = batched_results.size(dim=1)
+        num_exits = batched_results.size(dim=0)
         num_classes = batched_results.size(dim=2)
         
         hasExited = torch.zeros([num_batches], dtype=torch.bool)
@@ -81,7 +81,7 @@ class Comparison:
         
         for exit_b in range(num_exits): 
             index = torch.Tensor([exit_b]).to(batched_results.device).type(torch.int32)
-            result_layer = torch.index_select(batched_results, 1, index) # select exit from [B, E, C] to get [B, 1, C]
+            result_layer = torch.index_select(batched_results, 0, index) # select exit from [E, B, C] to get [1, B, C]
 
             result_layer = result_layer.reshape(num_batches,num_classes)# reshape from [B,1,C] to [B,C]
             
@@ -275,7 +275,7 @@ class Tester:
                     xb,yb = xb.to(self.device),yb.to(self.device)
                     res = self.model(xb) # implicitly calls forward and returns array of arrays of the final layer for each exit (techically list of tensors for each exit)
                     # res has dimension [num_exits, batch_size, num_classes]
-                    
+                    # breakpoint()
                     self.accu_track_totl.update_correct_list(res,yb)
                     
                     if self.comp_funcs is not None:

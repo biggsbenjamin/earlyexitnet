@@ -150,8 +150,8 @@ class B_Lenet(nn.Module):
             tmp = ee(x)
             num_classes = tmp.size(1)
             
-            tmp = tmp.reshape(num_batch, 1, num_classes) # resize from [B, C] to [B, 1, C] to then stack it along the second dimension
-            res = tmp if res is None else torch.cat((res,tmp), dim=1)
+            tmp = tmp.reshape(1, num_batch, num_classes) # resize from [B, C] to [1, B, C] to then stack it along the first dimension
+            res = tmp if res is None else torch.cat((res,tmp), dim=0)
         return res
 
     def forward(self, x):
