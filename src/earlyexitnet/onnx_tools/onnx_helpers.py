@@ -22,15 +22,21 @@ Method to export pytorch models to onnx.
 NOTE - This method goes via pytorch script to avoid
 constant propagation removing dynamic inference.
 """
+
+# convert the model to onnx format - trial with onnx lib
 def to_onnx(model,
             input_size, # shape of input e.g. [1,28,28]
             batch_size=1, # size of batch input
             path='outputs/onnx', # output path to save to
             fname='brn.onnx', # filename of onnx op
-            test_in=None): # pytorch tensor input to put thru exporter
-    #convert the model to onnx format - trial with onnx lib
+            test_in=None, # pytorch tensor input to put thru exporter
+            debug=True):
+
     # making sure in evaluation mode
-    model.eval()
+    if hasattr(model, 'fast_inference_mode'):
+        model.set_fast_inf_mode()
+    else:
+        model.eval()
 
     sv_pnt = os.path.join(path, fname)
     if not os.path.exists(path):
@@ -44,8 +50,10 @@ def to_onnx(model,
     # Just In Time compilation of pytorch model
     # to script Intermediate Representation
     scr_model = torch.jit.script(model)
-    print("PRINTING PYTORCH MODEL SCRIPT")
-    print(scr_model.graph, "\n")
+    if debug:
+        print("PRINTING PYTORCH MODEL SCRIPT")
+        print(scr_model.graph, "\n")
+    # NOTE not needed vvv
     ex_out = scr_model(x) # get output of script model
 
     torch.onnx.export(

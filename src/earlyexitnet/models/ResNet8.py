@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import numpy as np
 
 from earlyexitnet.tools import get_output_shape
 
@@ -266,7 +265,7 @@ class IntrClassif(nn.Module):
         # avg pool - TODO check if global or local
         self.pool = nn.AvgPool2d(2) # NOTE - NOT in fpgaconvnet, only global
 
-        self.linear_dim = np.prod(self._get_linear_size())
+        self.linear_dim = int(torch.prod(torch.tensor(self._get_linear_size())))
         print(f"Classif @ {self.bb_index} linear dim: {self.linear_dim}")
         # linear layer
         self.linear = nn.Sequential(
@@ -341,12 +340,22 @@ class ResNet8_2EE(ResNet8_backbone):
     def forward(self, x):
         #std forward function
         if self.fast_inference_mode:
-            for bb, ee in zip(self.backbone, self.exits):
-                x = bb(x)
-                res = ee(x) #res not changed by exit criterion
-                if self.exit_criterion_top1(res):
-                    return res
+            #for bb, ee in zip(self.backbone, self.exits):
+            #    x = bb(x)
+            #    res = ee(x) #res not changed by exit criterion
+            #    if self.exit_criterion_top1(res):
+            #        return res
+            y = self.init_conv(x)
+            res = self.exits[0](y)
+            if self.exit_criterion_top1(res):
+                return res
+            # compute remaining backbone layers
+            for b in self.backbone:
+                y = b(y)
+            # final exit
+            res = self.exits[1](y)
             return res
+
         else: # NOTE used for training
             # calculate all exits
             return self._forward_training(x)

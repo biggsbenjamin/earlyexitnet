@@ -56,6 +56,13 @@ def test_only(args):
     print("Setting up for testing")
     #load in the model from the path
     load_model(model, args.trained_model_path)
+    # check if there are thresholds provided
+    if args.top1_threshold is None and \
+            args.entr_threshold is None and \
+            exits > 1:
+        # no thresholds provided, skip testing
+        print("WARNING: No Thresholds provided, skipping testing.")
+        return model
     #skip to testing
     if args.dataset == 'mnist':
         datacoll = MNISTDataColl(batch_size_test=batch_size_test)
@@ -341,11 +348,6 @@ def main():
         model,model_path = train_n_test(args)
 
     if args.generate_onnx is not None:
-        # set inference mode
-        if hasattr(model, 'set_fast_inf_mode'):
-            model.set_fast_inf_mode()
-        else:
-            model.eval()
         # get input shape for graph gen
         if args.dataset == 'mnist':
             shape = [1,28,28]
