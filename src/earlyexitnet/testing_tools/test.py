@@ -109,7 +109,6 @@ class Comparison:
             # concatenate along the batch dimension
             self.raw_softmax = torch.cat((self.raw_softmax, sft_accum), dim=1) if self.raw_softmax is not None else sft_accum
             
-            self.true_result = torch.cat((self.true_result, batched_correct_results)) if self.true_result is not None else batched_correct_results
         
         self.total_time += stop - start
     
@@ -151,6 +150,10 @@ class Tester:
         self.comp_funcs = comp_funcs
         
         self.save_raw = save_raw
+        
+        if self.save_raw:
+            self.true_result = None
+            self.raw_layer = None
         
         if device is None or not torch.cuda.is_available():
             self.device = torch.device("cpu")
@@ -211,11 +214,14 @@ class Tester:
         self.accu_track_totl = AccuTracker(test_dl.batch_size,exits,self.sample_total)
 
 
-    def _entropy_comparison(self, layer: torch.Tensor, thresh: float) -> bool:
+    def _entropy_comparison(self, layer: torch.Tensor, thresh: float, test=False) -> bool:
         softmax = nn.functional.softmax(layer,dim=-1)
         entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)), dim=-1)
            
-        return entr < thresh
+        if test:
+            return entr < thresh, entr
+        else:
+            return entr < thresh
         
     def _softmax_comparison(self, layer: torch.Tensor, thresh: float, test=False) -> torch.Tensor:
         softmax = nn.functional.softmax(layer,dim=-1)
@@ -278,6 +284,11 @@ class Tester:
                     # breakpoint()
                     self.accu_track_totl.update_correct_list(res,yb)
                     
+                    if self.save_raw:
+                        self.true_result = torch.cat((self.true_result, yb)) if self.true_result is not None else yb
+                        self.raw_layer = torch.cat((self.raw_layer, res), dim=1) if self.raw_layer is not None else res
+                        
+                    
                     if self.comp_funcs is not None:
                         for comp in self.comp_funcs:
                             self.comparators[comp].eval(res,yb)
@@ -331,9 +342,11 @@ class Tester:
         return_val['batch_size'] = self.test_dl.batch_size
         return_val['accu_per_exit'] = self.accu_track_totl.get_accu(return_list=True)
         
+          
         if self.save_raw:
-            return_val['true_indices'] = self.comparators[self.comp_funcs[0]].true_result.tolist() # grab from any of the comparators that were used
-        
+            return_val['true_indices'] = self.true_result.tolist() # grab from any of the comparators that were used
+            return_val['raw_layer'] = self.raw_layer.tolist()
+            
         return return_val
 
     def test(self):

@@ -87,7 +87,7 @@ def baseE_subMax_softmax_float(final_layer: torch.Tensor) -> list[float]:
   return exp_zs
 
 def base2_subMax_softmax_fixed(final_layer: torch.Tensor) -> tuple[np.array, np.array]: 
-  NUM_EXP_BITS = 4
+  NUM_EXP_BITS = 16
   
   LAYER = Fxp(None, signed=True, n_word=16, n_frac=8)
   EXP   = Fxp(None, signed=False, n_word=NUM_EXP_BITS, n_frac=NUM_EXP_BITS-1) # sacrificing many bits 
