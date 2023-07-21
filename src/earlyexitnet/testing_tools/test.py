@@ -95,7 +95,7 @@ class Tester:
             # update accuracy, along with number exiting here
             accu_track.update_correct(
                     exit[exit_mask],gnd_trth[exit_mask],
-                    exit_count=exit_num,bin_index=i)
+                    accum_count=exit_num,bin_index=i)
             # update exit mask
             prev_mask = exit_mask
 
@@ -118,42 +118,6 @@ class Tester:
                         self.accu_track_entr,
                         res, yb, self.entropy_thresholds,
                         self._thr_entropy)
-
-                ## generate all false mask
-                #prev_mask = torch.tensor([False]*self.batch_size,
-                #        dtype=torch.bool,device=self.device)
-                #for i,(exit,thr) in enumerate(
-                #        zip(res,self.top1acc_thresholds)):
-                #    ### NOTE DEFINING TOP1 of SOFTMAX DECISION
-                #    sftmax = nn.functional.softmax(exit,dim=-1)
-                #    sftmx_max = torch.max(sftmax,dim=-1).values
-                #    exit_mask = sftmx_max.gt(thr).logical_and(prev_mask.logical_not())
-                #    # get number that are exiting here
-                #    exit_num = exit_mask.sum()
-                #    # updated the number exiting
-                #    self.exit_track_top1.add_val(exit_num,i)
-                #    # update accuracy, along with number exiting here
-                #    self.accu_track_top1.update_correct(exit[exit_mask],
-                #            yb[exit_mask],exit_count=exit_num,bin_index=i)
-                #    # update exit mask
-                #    prev_mask=exit_mask
-
-                ## generate all false mask
-                #prev_mask = torch.tensor([False]*self.batch_size,
-                #        dtype=torch.bool,device=self.device)
-                #for i,(exit,thr) in enumerate(zip(res,self.entropy_thresholds)):
-                #    softmax = nn.functional.softmax(exit,dim=-1)
-                #    entr = softmax.log().mul(softmax).nan_to_num().sum(dim=-1).mul(-1)
-                #    exit_mask = entr.lt(thr).logical_and(prev_mask.logical_not())
-                #    # get number that are exiting here
-                #    exit_num = exit_mask.sum()
-                #    # updated the number exiting
-                #    self.exit_track_entr.add_val(exit_num,i)
-                #    # update accuracy, along with number exiting here
-                #    self.accu_track_entr.update_correct(exit[exit_mask],
-                #            yb[exit_mask],exit_count=exit_num,bin_index=i)
-                #    # update exit mask
-                #    prev_mask=exit_mask
 
     def _test_single_exit(self):
         self.model.eval()

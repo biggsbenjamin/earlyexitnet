@@ -432,7 +432,7 @@ class Trainer:
                 prefix = 'joint'
         else: # pretrained model
             # NOTE assuming just backbone trained
-            load_model(self.model, self.pretrained_path)
+            load_model(self.model, self.pretrained_path,strict=False)
             print("JOINT TRAINING USING EXISTING BB")
             folder_path = 'jnt_fr_exstng' + timestamp
             prefix = 'bbexst-joint'
