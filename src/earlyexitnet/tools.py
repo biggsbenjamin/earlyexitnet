@@ -222,14 +222,16 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         self.set_length_accum = np.zeros(bins,dtype=int)
 
     ### functions to use ###
-    def add_val(self,value,bin_index=None): #adds val(s) for single iteration
+    def add_val(self,value,accum_count=None,bin_index=None): #adds val(s) for single iteration
+        if accum_count is None:
+            accum_count = self.batch_size
         if isinstance(value,list):
             assert len(value) == self.bin_num, "val list length mismatch {} to {}".format(
                                                                 len(value),self.bin_num)
             # NOTE having to add loop to get around cpu/gpu mismatch
             for idx,v in enumerate(value):
                 self.val_bins[idx] = self.val_bins[idx] + v
-            self.set_length_accum = self.set_length_accum + 1 #NOTE  mul by bs in the avg
+            self.set_length_accum = self.set_length_accum + accum_count
             return
 
         if bin_index is None and self.bin_num == 1:
@@ -237,7 +239,7 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         elif bin_index is not None:
             assert bin_index < self.bin_num, "index out of range for adding individual loss"
         self.val_bins[bin_index] += value
-        self.set_length_accum[bin_index] += 1#NOTE  mul by bs in the avg
+        self.set_length_accum[bin_index] += accum_count
         return
 
     def add_vals(self,val_array): #list of lists
@@ -332,7 +334,7 @@ class AccuTracker(Tracker):
             # NOTE having to add loop to get around cpu/gpu mismatch
             for idx,v in enumerate(value):
                 self.val_bins[idx] = self.val_bins[idx] + v
-            self.set_length_accum = self.set_length_accum + exit_count
+            self.set_length_accum = self.set_length_accum + accum_count
             return
 
         if bin_index is None and self.bin_num == 1:
@@ -508,3 +510,9 @@ def path_check(string): #checks for valid path
     else:
         raise FileNotFoundError(string)
 
+# for getting the shape of previous NN layer to feed into init
+# of next layer
+def get_output_shape(module, img_dim):
+    # returns output shape
+    dims = module(torch.rand(*(img_dim))).data.shape
+    return dims

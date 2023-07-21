@@ -205,38 +205,44 @@ def train_n_test(args):
     net_trainer = Trainer(
         model, train_dl, valid_dl, batch_size_train,
         path_str,loss_f=loss_f, exits=exits,
+        # set epochs
         backbone_epochs=args.bb_epochs,
         exit_epochs=args.ex_epochs,
         joint_epochs=args.jt_epochs,
+        # set opt cfg strings
+        backbone_opt_cfg=args.bb_opt_cfg,
+        exit_opt_cfg=args.ex_opt_cfg,
+        joint_opt_cfg=args.jt_opt_cfg,
         device=device,
         pretrained_path=args.trained_model_path,
         validation_frequency=args.validation_frequency
     )
+    print(f"using bb optimiser -> {args.bb_opt_cfg}")
+    print(f"using jt optimiser -> {args.jt_opt_cfg}")
     if exits > 1:
         best,last=net_trainer.train_joint(pretrain_backbone=pretrain_backbone)
     else:
-        if args.select_optimiser is not 'adam':
-            print(f"WARNING: Using {args.select_optimiser} instead of adam")
         ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
         intr_path = f'bb_only_time_{ts}'
         print("Saving to:",intr_path)
         # training backbone only using same method
         best,last=net_trainer.train_backbone(
-            internal_folder=intr_path,
-            opt_name=args.select_optimiser)
+            internal_folder=intr_path)
     # get path to network savepoints
     save_path = os.path.split(last)[0]
     #save some notes about the run
     notes_path = os.path.join(save_path,'notes.txt')
     with open(notes_path, 'w') as notes:
         notes.write("bb epochs {}, jt epochs {}\n".format(args.bb_epochs, args.jt_epochs))
-        notes.write("Training batch size {}, Test batchsize {}\n".format(batch_size_train,
+        notes.write("Training batch-size {}, Test batch-size {}\n".format(batch_size_train,
                                                                        batch_size_test))
-        notes.write(f"Optimiser info: {args.select_optimiser}\n")
+        notes.write(f"Optimiser bb info: {net_trainer.backbone_opt_cfg}\n")
+        notes.write(f"Optimiser jt info: {net_trainer.joint_opt_cfg}\n")
         notes.write(f"Dataset: {args.dataset}\n")
         # record exit weighting (if model has it)
         if hasattr(net_trainer.model,'exit_loss_weights'):
-            notes.write("model training exit weights:"+str(net_trainer.model.exit_loss_weights)+"\n")
+            ex_loss_w=str(net_trainer.model.exit_loss_weights)
+            notes.write(f"model training exit weights:{ex_loss_w}\n")
         notes.write("Path to last model:"+str(last)+"\n")
         notes.write("Path to best model:"+str(best)+"\n")
         # store backbone training data, NOTE for now, just for resnet
@@ -266,26 +272,13 @@ def main():
     parser = argparse.ArgumentParser(description="Early Exit CLI")
 
     parser.add_argument('-m','--model_name',
-            choices=[   'b_lenet',
-                        'b_lenet_fcn',
-                        'b_lenet_se',
-                        'lenet',
-                        'testnet',
-                        'brnfirst',
-                        'brnfirst_se',
-                        'brnsecond',
-                        'backbone_se',
-                        'b_lenet_cifar',
-                        'resnet8',
-                        'resnet8_bb'
-                        ],
-            required=True, help='select the model name')
+            required=True, help='select the model name - see training model')
 
     parser.add_argument('-mp','--trained_model_path',metavar='PATH',type=path_check,
             required=False,
             help='Path to previously trained model to load, the same type as model name')
 
-    parser.add_argument('-bstr','--batch_size_train',type=int,default=512,
+    parser.add_argument('-bstr','--batch_size_train',type=int,default=500,
                         help='batch size for the training of the network')
     parser.add_argument('-bbe','--bb_epochs', metavar='N',type=int, default=1, required=False,
             help='Epochs to train backbone separately, or non ee network')
@@ -296,8 +289,12 @@ def main():
     parser.add_argument('-vf','--validation_frequency',type=int,default=1,required=False,
             help='Validation and save frequency. Number of epochs to wait for before valid,saving.')
     # opt selection
-    parser.add_argument('-so','--select_optimiser',type=str,default='adam',required=False,
-            help='Select between the adam opt (for small branchynet) and SGD for resnet')
+    parser.add_argument('-bbo','--bb_opt_cfg',type=str,default='adam-brn',required=False,
+            help='Selection string to pick backbone optimiser configuration from training_tools')
+    parser.add_argument('-jto','--jt_opt_cfg',type=str,default='adam-brn',required=False,
+            help='Selection string to pick joint optimiser configuration from training_tools')
+    parser.add_argument('-exo','--ex_opt_cfg',type=str,default='adam-brn',required=False,
+            help='Selection string to pick exit-only optimiser configuration from training_tools')
     # run notes
     parser.add_argument('-rn', '--run_notes', type=str, required=False,
             help='Some notes to add to the train/test information about the model or otherwise')
@@ -337,7 +334,7 @@ def main():
     # parse the arguments
     args = parser.parse_args()
 
-    if args.trained_model_path is not None and args.jt_epochs==0:
+    if args.trained_model_path is not None and args.bb_epochs==0 and args.jt_epochs==0:
         model = test_only(args)
         model_path = args.trained_model_path
     else:

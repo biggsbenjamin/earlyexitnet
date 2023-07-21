@@ -1,5 +1,9 @@
 import torch
 import torch.nn as nn
+import numpy as np
+
+from earlyexitnet.tools import get_output_shape
+
 class BasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super(BasicBlock, self).__init__()
@@ -215,3 +219,139 @@ class ResNet8_backbone(nn.Module):
         y = self.end_layers(y)
         return [y]
 
+# Early-Exit ResNet8 and classifier structures
+## FlexDNN Classifier
+# from paper:
+# 3 dw sep conv (with activation lyrs)
+# 2 pool layers
+# 1 fc layer
+# part of the arch search removes conv blocks when theres no impact on accu
+    # I guess this would be later in the network
+
+## MSDNet Classifier
+class ConvBasic(nn.Module):
+    def __init__(self, chanIn, chanOut, k=3, s=1,
+            p=1, p_ceil_mode=False, bias=True):
+        super(ConvBasic, self).__init__()
+        self.conv = nn.Sequential(
+                nn.Conv2d(chanIn, chanOut, kernel_size=k, stride=s,
+                    padding=p, bias=False),
+                nn.BatchNorm2d(chanOut),
+                nn.ReLU(True) #in place
+                )
+
+    def forward(self, x):
+        return self.conv(x)
+
+class IntrClassif(nn.Module):
+    # intermediate classifer head to be attached along the backbone
+    # Inpsired by MSDNet classifiers (from HAPI):
+    # https://github.com/kalviny/MSDNet-PyTorch/blob/master/models/msdnet.py
+
+    def __init__(self,chanIn,input_shape,classes,bb_index):
+        super(IntrClassif, self).__init__()
+
+        # index for the position in the backbone layer
+        self.bb_index = bb_index
+        # input shape to automatically size linear layer
+        self.input_shape = input_shape
+
+        # intermediate conv channels
+        #interChans = 128 # TODO reduce size for smaller nets
+        interChans = 32
+        # conv, bnorm, relu 1
+        self.conv1 = ConvBasic(chanIn,interChans, k=3, s=2, p=[1,1])
+        # conv, bnorm, relu 2
+        self.conv2 = ConvBasic(interChans,interChans, k=3, s=2, p=[1,1])
+        # avg pool - TODO check if global or local
+        self.pool = nn.AvgPool2d(2) # NOTE - NOT in fpgaconvnet, only global
+
+        self.linear_dim = np.prod(self._get_linear_size())
+        print(f"Classif @ {self.bb_index} linear dim: {self.linear_dim}")
+        # linear layer
+        self.linear = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(self.linear_dim, classes)
+        )
+
+    def _get_linear_size(self):
+        c1out = get_output_shape(self.conv1, self.input_shape)
+        c2out = get_output_shape(self.conv2, c1out)
+        pout = get_output_shape(self.pool, c2out)
+        return pout
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.pool(x)
+        return self.linear(x)
+
+class ResNet8_2EE(ResNet8_backbone):
+    # basic early exit network for resnet8
+    def __init__(self):
+        super(ResNet8_2EE, self).__init__()
+
+        # NOTE structure:
+        # init conv -> exit1
+        # self.backbone
+        # self.end_layer (avg pool, flatten, linear)
+
+        self.exits = nn.ModuleList()
+        # weighting for each exit when summing loss
+        self.input_shape=[1,3,32,32]
+
+        self.exit_num=2
+        self.fast_inference_mode = False
+        self.exit_loss_weights = [1.0, 1.0]
+        self.exit_threshold = torch.tensor([0.8], dtype=torch.float32)
+        self._build_exits()
+
+    def _build_exits(self): #adding early exits/branches
+        # TODO generalise exit placement for multi exit
+        # early exit 1
+        previous_shape = get_output_shape(self.init_conv,self.input_shape)
+        ee1 = IntrClassif(16,previous_shape,self.num_classes,0)
+        self.exits.append(ee1)
+
+        #final exit
+        self.exits.append(self.end_layers)
+
+    @torch.jit.unused #decorator to skip jit comp
+    def _forward_training(self, x):
+        # TODO make jit compatible - not urgent
+        # NOTE broken because returning list()
+        res = []
+        y = self.init_conv(x)
+        res.append(self.exits[0](y))
+        # compute remaining backbone layers
+        for b in self.backbone:
+            y = b(y)
+        # final exit
+        y = self.end_layers(y)
+        res.append(y)
+
+        return res
+
+    def exit_criterion_top1(self, x): #NOT for batch size > 1
+        with torch.no_grad():
+            pk = nn.functional.softmax(x, dim=-1)
+            top1 = torch.max(pk)
+            return top1 > self.exit_threshold
+
+    def forward(self, x):
+        #std forward function
+        if self.fast_inference_mode:
+            for bb, ee in zip(self.backbone, self.exits):
+                x = bb(x)
+                res = ee(x) #res not changed by exit criterion
+                if self.exit_criterion_top1(res):
+                    return res
+            return res
+        else: # NOTE used for training
+            # calculate all exits
+            return self._forward_training(x)
+
+    def set_fast_inf_mode(self, mode=True):
+        if mode:
+            self.eval()
+        self.fast_inference_mode = mode
