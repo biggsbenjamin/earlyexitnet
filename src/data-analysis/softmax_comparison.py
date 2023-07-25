@@ -5,6 +5,13 @@ from scipy.stats import mstats
 from sklearn.neighbors import KernelDensity
 import sys
 
+def fit_kernel(data, x_vals, kernel='gaussian', bandwidth=1):
+  model = KernelDensity(bandwidth=bandwidth, kernel=kernel)
+  
+  model.fit(data.reshape(len(data), 1))
+  probs = model.score_samples(x_vals.reshape(len(x_vals), 1))
+  return np.exp(probs)
+
 def main(json_file):
 
   # json_file = "./rawSoftmax_b_lenet_se_singleThresh_2023-07-19_153525.json"
@@ -13,7 +20,8 @@ def main(json_file):
   with open(json_file) as json_data:
       data = json.load(json_data)
 
-
+  title_name = data['model'] + " " + data['dataset']
+  
   true_vals = data['test_vals']['true_indices']
   raw_layer = data['test_vals']['raw_layer']
 
@@ -21,11 +29,74 @@ def main(json_file):
 
   num_compares = len(data['test_vals']['comps'])
 
+  correct_col = 'blue'
+  wrong_col = 'red'
+
   # num_exits x num_samples x num_classes
   correctness = np.argmax(raw_layer, -1 ) == true_vals
 
-  # print(axis)
+  # plot the distribution the maximum values of each class
+  max_vals = np.max(raw_layer, -1)
+  argmax_vals = np.argmax(raw_layer, -1)
+  
+  
+  comb = np.stack((argmax_vals, max_vals, correctness), -1)
+  
+  fig1, axis1 = plt.subplots(nrows=num_exits)
+  
+  fig1.suptitle(f"{title_name} Raw value distribution")
+  
+  for e, e_exit in enumerate(max_vals):
+    ax = axis1[e]
+    
+    max_val = max(e_exit)
+    min_val = min(e_exit)
+    bins = 40
+    
+    x = np.linspace(min_val, max_val, 100)
+    
+    correct = e_exit[correctness[e]]    
+    ax.plot(x, fit_kernel(correct, x, bandwidth=(max_val - min_val)/30), color=correct_col)
+    ax.hist(correct, bins=bins, density=True, histtype='step', label="correct", color=correct_col)
+    
+    wrong = e_exit[np.invert(correctness[e])]    
+    ax.plot(x, fit_kernel(wrong, x, bandwidth=(max_val - min_val)/30), color=wrong_col)
+    ax.hist(wrong, bins=bins, density=True, histtype='step', label="wrong", color=wrong_col)
+    
+    ax.set_title(f"exit {e}")
+    ax.legend(loc='upper left')
+  
+  sorted_raw = np.asarray([c[c[:,0].argsort()] for c in comb])
+  
+  grouped_by_class = [np.split(s[:,1:], np.unique(s[:,0], return_index=True)[1][1:]) for s in sorted_raw]
+  
+  fig2, axis2 = plt.subplots(nrows=num_exits)
+  fig2.suptitle(f"{title_name} Per class final layer distribution")
+  for e, e_exit in enumerate(grouped_by_class):
+    ax = axis2[e]
+    
+    max_val = max(max_vals[e])
+    min_val = min(max_vals[e])
+    
+    x = np.linspace(min_val, max_val, 100)
+    
+    for class_num, vals in enumerate(e_exit):
+      label = f'C{class_num}'      
+      ax.plot(x, fit_kernel(vals[:,0], x, bandwidth=(max_val - min_val)/30),label=label, alpha=0.7)
+      # ax.hist(vals[:,0], density=True,histtype='step',label=label, bins=20)
+    
+    correct = max_vals[e][correctness[e]]    
+    ax.plot(x, fit_kernel(correct, x, bandwidth=(max_val - min_val)/30), color=correct_col, ls="dashed", label="correct avg")
+    
+    wrong = max_vals[e][np.invert(correctness[e])]    
+    ax.plot(x, fit_kernel(wrong, x, bandwidth=(max_val - min_val)/30), color=wrong_col, ls="dashdot", label="incorrect avg")
+    
+    ax.set_title(f"exit {e}")
+    ax.legend(loc='upper left')
 
+
+
+  # ANALISE VARIOUS SOFTMAX FUNCTIONS
   for row, function in enumerate(data['test_vals']['comps']):
     
     sftmx = function['raw_softmax']
@@ -33,7 +104,7 @@ def main(json_file):
     
     fig, axis = plt.subplots(nrows=num_exits)
     
-    fig.suptitle(name)
+    fig.suptitle(f"{title_name} {name}")
     
     for exit_num, softmax in enumerate(sftmx):
       
@@ -51,8 +122,7 @@ def main(json_file):
       correct_vals = softmax[correctness[exit_num]]
       wrong_vals = softmax[np.invert(correctness)[exit_num]]
       
-      correct_col = 'blue'
-      wrong_col = 'red'
+      
       
       # logbins = np.logspace(np.log10(0.1),np.log10(1),100)
       logbins =  np.linspace(0, 1, 100)
