@@ -21,7 +21,9 @@ class DataColl:
             normalise=False,
             k_cv=None,
             v_split=None,
-            num_workers=1
+            num_workers=1,
+            shuffle=True,
+            no_scaling=False
             ):
         self.batch_size_train = batch_size_train
         self.batch_size_test = batch_size_test
@@ -38,6 +40,11 @@ class DataColl:
         assert ((k_cv is None) or (v_split is None)), "only one V type, or none at all"
         self.has_valid = True if v_split is not None or k_cv is not None else False
         self.single_split = True if v_split is not None else False
+
+        self.shuffle=shuffle
+        # don't scale the values
+        # TODO apply this to other transform compositions
+        self.no_scaling=no_scaling
 
         self._load_sets()
 
@@ -94,17 +101,17 @@ class DataColl:
             self.gen_train()
             self.valid_dl = None #reset valid dl in case force not called here
             self.train_dl = DataLoader(self.train_set, batch_size=self.batch_size_train,
-                        drop_last=True, shuffle=True, num_workers=self.num_workers)
+                        drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
         else:
             if self.train_set is None:
                 self.gen_train()
             elif self.train_dl is None:
                 if self.single_split:
                     self.train_dl = DataLoader(self.train_set, batch_size=self.batch_size_train,
-                            drop_last=True, shuffle=True, num_workers=self.num_workers)
+                            drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
                 else:
                     self.train_dl = DataLoader(self.full_train_set, batch_size=self.
-                            batch_size_train,drop_last=True, shuffle=True,
+                            batch_size_train,drop_last=True, shuffle=self.shuffle,
                             num_workers=self.num_workers)
         #returns training set
         return self.train_dl
@@ -118,7 +125,7 @@ class DataColl:
             self.gen_valid()
         elif self.valid_dl is None:
             self.valid_dl = DataLoader(self.valid_set, batch_size=self.batch_size_train,
-                    drop_last=True, shuffle=True, num_workers=self.num_workers)
+                    drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
         #returns validation split
         return self.valid_dl
 
@@ -130,7 +137,7 @@ class DataColl:
         self.gen_test() #NOTE only assertion for now
         if self.test_dl is None:
             self.test_dl = DataLoader(self.full_test_set, batch_size=self.batch_size_test,
-                    drop_last=True, shuffle=True, num_workers=self.num_workers)
+                    drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
         return self.test_dl
 
 class MNISTDataColl(DataColl):
@@ -148,14 +155,33 @@ class MNISTDataColl(DataColl):
 class CIFAR10DataColl(DataColl):
     def _load_sets(self):
         #child version of function, CIFAR10 specific
-        #standard transform for CIFAR10
-        self.tfs = transforms.Compose([transforms.ToTensor()])
-        #full training set, no normalisation
+        #transform for CIFAR10 training
+        tfs_list = [transforms.ToTensor()]
+        custom_trfm = transforms.Lambda(lambda x: x*255)
+        mean=(0.4913997551666284, 0.48215855929893703, 0.4465309133731618)
+        std=(0.24703225141799082, 0.24348516474564, 0.26158783926049628)
+        if self.no_scaling:
+            tfs_list.append(custom_trfm)
+            mean=(0.4913997551666284*255, 0.48215855929893703*255, 0.4465309133731618*255)
+            std=(0.24703225141799082*15.968719, 0.24348516474564*15.968719, 0.26158783926049628*15.968719)
+        tfs_list = tfs_list + [transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(degrees=10),
+                transforms.ColorJitter(brightness=0.5),
+                #transforms.Normalize(mean=mean,std=std)
+                ]
+        self.tfs_train = transforms.Compose(tfs_list)
+        #full training set
         self.full_train_set = torchvision.datasets.CIFAR10('../data/cifar10',
-            download=True, train=True, transform=self.tfs)
+            download=True, train=True, transform=self.tfs_train)
+
+        tfs_test_list = [transforms.ToTensor()]
+        if self.no_scaling:
+            tfs_test_list.append(custom_trfm)
+        #tfs_test_list.append(transforms.Normalize(mean=mean,std=std))
+        self.tfs_test = transforms.Compose(tfs_test_list)
         #full testing set
         self.full_test_set = torchvision.datasets.CIFAR10('../data/cifar10',
-                download=True, train=False, transform=self.tfs)
+                download=True, train=False, transform=self.tfs_test)
 
 class CIFAR100DataColl(DataColl):
     def _load_sets(self):
@@ -196,14 +222,16 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         self.set_length_accum = np.zeros(bins,dtype=int)
 
     ### functions to use ###
-    def add_val(self,value,bin_index=None): #adds val(s) for single iteration
+    def add_val(self,value,accum_count=None,bin_index=None): #adds val(s) for single iteration
+        if accum_count is None:
+            accum_count = self.batch_size
         if isinstance(value,list):
             assert len(value) == self.bin_num, "val list length mismatch {} to {}".format(
                                                                 len(value),self.bin_num)
             # NOTE having to add loop to get around cpu/gpu mismatch
             for idx,v in enumerate(value):
                 self.val_bins[idx] = self.val_bins[idx] + v
-            self.set_length_accum = self.set_length_accum + 1 #NOTE  mul by bs in the avg
+            self.set_length_accum = self.set_length_accum + accum_count
             return
 
         if bin_index is None and self.bin_num == 1:
@@ -211,7 +239,7 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         elif bin_index is not None:
             assert bin_index < self.bin_num, "index out of range for adding individual loss"
         self.val_bins[bin_index] += value
-        self.set_length_accum[bin_index] += 1#NOTE  mul by bs in the avg
+        self.set_length_accum[bin_index] += accum_count
         return
 
     def add_vals(self,val_array): #list of lists
@@ -245,7 +273,9 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
             divisor = self.set_length * self.batch_size
         else:
             #use accumulated values
-            divisor = self.set_length_accum * self.batch_size
+            divisor = self.set_length_accum# * self.batch_size
+
+        #print(f"Divisor: {divisor}")
 
         self.avg_vals = self.val_bins / divisor
         if return_list:
@@ -301,7 +331,7 @@ class AccuTracker(Tracker):
             count = [self.get_num_correct(val,label) for val in result]
         else:
             if isinstance(result, list):
-                count = self.get_num_correct(result[0],label)
+                count = self.get_num_correct(result[-1],label)
             else:
                 count = self.get_num_correct(result,label)
     
@@ -364,11 +394,11 @@ def save_model(model, path, file_prefix='', seed=None, epoch=None, opt=None,
     print("Saved to:", file_path)
     return file_path
 
-def load_model(model, path):
+def load_model(model, path, strict=True):
     #TODO add "warmstart" - partial reloading of model, useful for backbone pre_training
     #loads the model from the path specified
     checkpoint = torch.load(path)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_state_dict(checkpoint['model_state_dict'], strict=strict)
 
     #TODO optionals
     #opt.load_state_dict(checkpoint['opt_state_dict'])
@@ -448,3 +478,21 @@ def exit_pc(ee_pc=0.70, bs=1024):
     for idx, sample in enumerate(hw_test):
         np.save(target_dir+('img{:05d}.npy'.format(idx)) ,sample)
     return
+
+
+################################
+######   Helpful Funcs   #######
+################################
+
+def path_check(string): #checks for valid path
+    if os.path.exists(string):
+        return string
+    else:
+        raise FileNotFoundError(string)
+
+# for getting the shape of previous NN layer to feed into init
+# of next layer
+def get_output_shape(module, img_dim):
+    # returns output shape
+    dims = module(torch.rand(*(img_dim))).data.shape
+    return dims

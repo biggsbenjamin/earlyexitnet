@@ -13,7 +13,11 @@ from earlyexitnet.training_tools.train import Trainer,get_model
 from earlyexitnet.testing_tools.test import Tester
 
 # import dataloaders from tools
-from earlyexitnet.tools import MNISTDataColl,CIFAR10DataColl,load_model
+from earlyexitnet.tools import \
+    MNISTDataColl,CIFAR10DataColl,load_model,path_check
+
+from earlyexitnet.onnx_tools.onnx_helpers import \
+    to_onnx
 
 # import nn for loss function
 import torch.nn as nn
@@ -30,6 +34,7 @@ import numpy as np
 
 
 def get_exits(model_str):
+    # NOTE only used if there is no exit num constant
     # set number of exits
     if model_str in ['lenet','testnet','brnfirst',
                      'brnsecond','brnfirst_se','backbone_se']:
@@ -61,11 +66,19 @@ def test_only(args):
     num_workers = 1 if args.num_workers is None else args.num_workers
     print(f"Number of workers: {num_workers}")
     
+    # check if there are thresholds provided
+    if args.top1_threshold is None and \
+            args.entr_threshold is None and \
+            exits > 1:
+        # no thresholds provided, skip testing
+        print("WARNING: No Thresholds provided, skipping testing.")
+        return model
     #skip to testing
     if args.dataset == 'mnist':
         datacoll = MNISTDataColl(batch_size_test=batch_size_test,num_workers=num_workers)
     elif args.dataset == 'cifar10':
         datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,num_workers=num_workers)
+        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,no_scaling=args.no_scaling)
     else:
         raise NameError("Dataset not supported, check name:",
                         args.dataset)
@@ -203,7 +216,11 @@ Main training and testing function run from the cli
 def train_n_test(args):
     #set up the model specified in args
     model = get_model(args.model_name)
-    exits = get_exits(args.model_name)
+    # get number of exits
+    if hasattr(model,'exit_num'):
+        exits=model.exit_num
+    else:
+        exits=get_exits(args.model_name)
     print("Model done:", args.model_name)
     # Device setup
     if torch.cuda.is_available() and args.gpu_target is not None:
@@ -212,7 +229,7 @@ def train_n_test(args):
         device = torch.device("cpu")
     print("Device:", device)
     num_workers = 1 if args.num_workers is None else args.num_workers
-    print("Number of workers: {num_workers}")
+    print(f"Number of workers: {num_workers}")
     #set loss function
     loss_f = nn.CrossEntropyLoss() # combines log softmax and negative log likelihood
     print("Loss function set")
@@ -232,7 +249,8 @@ def train_n_test(args):
     elif args.dataset == 'cifar10':
         datacoll = CIFAR10DataColl(batch_size_train=batch_size_train,
                 batch_size_test=batch_size_test,normalise=normalise,
-                v_split=validation_split,num_workers=num_workers)
+                v_split=validation_split,num_workers=num_workers,
+                no_scaling=args.no_scaling)
     else:
         raise NameError("Dataset not supported, check name:",args.dataset)
     train_dl = datacoll.get_train_dl()
@@ -240,7 +258,7 @@ def train_n_test(args):
     print("Got training data, batch size:",batch_size_train)
 
     #start training loop for epochs - at some point add recording points here
-    path_str = 'outputs/'
+    path_str = f'outputs/{args.model_name}/'
     pretrain_backbone=True
     if args.bb_epochs == 0:
         # if no model provided, joint from scratch
@@ -252,12 +270,20 @@ def train_n_test(args):
     net_trainer = Trainer(
         model, train_dl, valid_dl, batch_size_train,
         path_str,loss_f=loss_f, exits=exits,
+        # set epochs
         backbone_epochs=args.bb_epochs,
         exit_epochs=args.ex_epochs,
         joint_epochs=args.jt_epochs,
+        # set opt cfg strings
+        backbone_opt_cfg=args.bb_opt_cfg,
+        exit_opt_cfg=args.ex_opt_cfg,
+        joint_opt_cfg=args.jt_opt_cfg,
         device=device,
-        pretrained_path=args.trained_model_path
+        pretrained_path=args.trained_model_path,
+        validation_frequency=args.validation_frequency
     )
+    print(f"using bb optimiser -> {args.bb_opt_cfg}")
+    print(f"using jt optimiser -> {args.jt_opt_cfg}")
     if exits > 1:
         best,last=net_trainer.train_joint(pretrain_backbone=pretrain_backbone)
     else:
@@ -273,19 +299,37 @@ def train_n_test(args):
     notes_path = os.path.join(save_path,'notes.txt')
     with open(notes_path, 'w') as notes:
         notes.write("bb epochs {}, jt epochs {}\n".format(args.bb_epochs, args.jt_epochs))
-        notes.write("Training batch size {}, Test batchsize {}\n".format(batch_size_train,
+        notes.write("Training batch-size {}, Test batch-size {}\n".format(batch_size_train,
                                                                        batch_size_test))
+        notes.write(f"Optimiser bb info: {net_trainer.backbone_opt_cfg}\n")
+        notes.write(f"Optimiser jt info: {net_trainer.joint_opt_cfg}\n")
+        notes.write(f"Dataset: {args.dataset}\n")
         # record exit weighting (if model has it)
-        if hasattr(model,'exit_loss_weights'):
-            notes.write("model training exit weights:"+str(net_trainer.model.exit_loss_weights)+"\n")
+        if hasattr(net_trainer.model,'exit_loss_weights'):
+            ex_loss_w=str(net_trainer.model.exit_loss_weights)
+            notes.write(f"model training exit weights:{ex_loss_w}\n")
         notes.write("Path to last model:"+str(last)+"\n")
+        notes.write("Path to best model:"+str(best)+"\n")
+        # store backbone training data, NOTE for now, just for resnet
+        notes.write(f"bb_train_epcs: {net_trainer.bb_train_epcs}\n")
+        notes.write(f"bb_train_loss: {net_trainer.bb_train_loss}\n")
+        notes.write(f"bb_train_accu: {net_trainer.bb_train_accu}\n")
+        notes.write(f"bb_valid_epcs: {net_trainer.bb_valid_epcs}\n")
+        notes.write(f"bb_valid_loss: {net_trainer.bb_valid_loss}\n")
+        notes.write(f"bb_valid_accu: {net_trainer.bb_valid_accu}\n")
     notes.close()
 
     #TODO graph training data
     #separate graphs for pre training and joint training
 
+    # loading best model
+    print(f"Loading best model: {best}")
+    load_model(net_trainer.model, best)
+
     #once trained, run it on the test data
-    test(datacoll,net_trainer.model,exits,loss_f,notes_path,args)
+    # test(datacoll,net_trainer.model,exits,loss_f,notes_path,args)
+    test(datacoll,net_trainer.model,exits,loss_f,best,notes_path,args)
+    return net_trainer.model,best
 
 
 def path_check(string): #checks for valid path
@@ -301,31 +345,30 @@ def main():
     parser = argparse.ArgumentParser(description="Early Exit CLI")
 
     parser.add_argument('-m','--model_name',
-            choices=[   'b_lenet',
-                        'b_lenet_fcn',
-                        'b_lenet_se',
-                        'lenet',
-                        'testnet',
-                        'brnfirst',
-                        'brnfirst_se',
-                        'brnsecond',
-                        'backbone_se',
-                        'b_lenet_cifar',
-                        ],
-            required=True, help='select the model name')
+            required=True, help='select the model name - see training model')
 
     parser.add_argument('-mp','--trained_model_path',metavar='PATH',type=path_check,
             required=False,
             help='Path to previously trained model to load, the same type as model name')
 
-    parser.add_argument('-bstr','--batch_size_train',type=int,default=512,
+    parser.add_argument('-bstr','--batch_size_train',type=int,default=500,
                         help='batch size for the training of the network')
     parser.add_argument('-bbe','--bb_epochs', metavar='N',type=int, default=1, required=False,
             help='Epochs to train backbone separately, or non ee network')
-    parser.add_argument('-jte','--jt_epochs', metavar='n',type=int, default=1, required=False,
+    parser.add_argument('-jte','--jt_epochs', metavar='n',type=int, default=0, required=False,
             help='epochs to train exits jointly with backbone')
-    parser.add_argument('-exe','--ex_epochs', metavar='n',type=int, default=1, required=False,
+    parser.add_argument('-exe','--ex_epochs', metavar='n',type=int, default=0, required=False,
             help='epochs to train exits with frozen backbone')
+    parser.add_argument('-vf','--validation_frequency',type=int,default=1,required=False,
+            help='Validation and save frequency. Number of epochs to wait for before valid,saving.')
+    # opt selection
+    parser.add_argument('-bbo','--bb_opt_cfg',type=str,default='adam-brn',required=False,
+            help='Selection string to pick backbone optimiser configuration from training_tools')
+    parser.add_argument('-jto','--jt_opt_cfg',type=str,default='adam-brn',required=False,
+            help='Selection string to pick joint optimiser configuration from training_tools')
+    parser.add_argument('-exo','--ex_opt_cfg',type=str,default='adam-brn',required=False,
+            help='Selection string to pick exit-only optimiser configuration from training_tools')
+    # run notes
     parser.add_argument('-rn', '--run_notes', type=str, required=False,
             help='Some notes to add to the train/test information about the model or otherwise')
     
@@ -342,6 +385,8 @@ def main():
             choices=['mnist','cifar10','cifar100'],
             required=False, default='mnist',
             help='select the dataset, default is mnist')
+    parser.add_argument('--no_scaling',action='store_true',
+                        help='Prevents datqa being scaled to between 0,1')
 
     # choose the cuda device to target
     parser.add_argument('-gpu','--gpu_target',type=int,required=False,
@@ -362,6 +407,11 @@ def main():
     parser.add_argument('-sr', '--save_raw_softmax', type=bool, default=False, required=False, 
                         help="Save the value of the softmax outputs")
 
+    # generate onnx graph for the model
+    parser.add_argument('-go', '--generate_onnx',metavar='PATH',type=path_check,
+                        required=False,
+                        help='Generate onnx from loaded or trained Pytorch model, specify the directory of the output onnx')
+
     #TODO arguments to add
         #training loss function
         #some kind of testing specification
@@ -369,10 +419,27 @@ def main():
     # parse the arguments
     args = parser.parse_args()
 
-    if args.trained_model_path is not None:
-        test_only(args)
+    if args.trained_model_path is not None and args.bb_epochs==0 and args.jt_epochs==0:
+        model = test_only(args)
+        model_path = args.trained_model_path
     else:
-        train_n_test(args)
+        model,model_path = train_n_test(args)
+
+    if args.generate_onnx is not None:
+        # get input shape for graph gen
+        if args.dataset == 'mnist':
+            shape = [1,28,28]
+        elif args.dataset in ['cifar10','cifar100']:
+            shape = [3,32,32]
+        else:
+            raise NameError("Unknown input shape for model.")
+        # generate model name
+        pt_path = os.path.splitext(os.path.basename(model_path))[0]
+        fname = f'{args.model_name}_{pt_path}.onnx'
+        # convert to onnx and save to op
+        to_onnx(model,shape,batch_size=1,
+                path=args.generate_onnx,
+                fname=fname)
 
 if __name__ == "__main__":
     main()

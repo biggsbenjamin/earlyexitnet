@@ -247,7 +247,7 @@ class BasicBlock(nn.Module):
 
     def forward(self, x):
         fwd = self.layers[0](x) # conv layers
-        #fwd += self.layers[1](x) # shortcut
+        fwd += self.layers[1](x) # shortcut
         fwd = self.layers[2](fwd) # activation
         return fwd
 

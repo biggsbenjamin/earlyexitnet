@@ -160,6 +160,7 @@ class Tester:
         else:
             self.device = device
 
+        self.batch_size = test_dl.batch_size
         if exits > 1:
             #TODO make thresholds a more flexible param
             #setting top1acc threshold for exiting (final exit set to 0)

@@ -33,6 +33,8 @@ For Ubuntu this can be done with:
 
 Then, re-run `pip install .`
 
+> **Note** Issues with pip failing may be solved by `conda install [package]=[version]` specified in the `pyproject.toml`
+
 ### Troubleshooting
 
 For other Distros you may need a more recent version.
@@ -47,19 +49,28 @@ cmake version required >= 3.1 and can be installed to conda using `conda install
 
 `python -m earlyexitnet.cli -m [model name] -bbe [backbone epochs] -jte [joint exit & backbone epochs] -rn "run notes example" -t1 0.75 -entr 0.01`
 
-`python -m earlyexitnet.cli -m b_lenet -bbe 50 -jte 30 -rn "run notes example" -t1 0.75 -entr 0.01`
+`python -m earlyexitnet.cli -m b_lenet_se -bbe 50 -jte 30 -rn "run notes example" -t1 0.75 -entr 0.01`
 
 ## Test Only Example
 
-`python -m earlyexitnet.cli -m b_lenet -mp /path/to/saved/model -rn "run notes example" -t1 0.75 -entr 0.01`
+`python -m earlyexitnet.cli -m b_lenet -mp /path/to/saved/model.pth -rn "run notes example" -t1 0.75 -entr 0.01`
 
 This sets the top1 (maximum softmax) threshold to 0.75 and the entropy threshold to 0.01.
 
 ## Convert Model to ONNX Example
 
+`python -m earlyexitnet.cli -m b_lenet -mp /path/to/saved/model.pth -rn "run notes example" -go path/to/onnx/folder/`
 
 ## List of Models
 
+TBD
+
+### Training ResNet8 backbone
+
+`python -m earlyexitnet.cli -m resnet8_bb -bbe 10 -vf 5 -d cifar10 -rn "testing resnet8 with batchnorm" -so sgd`
+
+Where `-so` is select optimiser. The current default can be found in the training class. 
+`-vf` is the frequency at which to perform a validation run and save the model.
 
 ## Getting visual representation of the onnx graph
 Use [netron](ihttps://netron.app/) viewer

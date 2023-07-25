@@ -1,4 +1,8 @@
+# TODO refactor
+
 '''
+!!!OLD!!!
+
 Testing the onnx lib with pytorch branchynet early exit model.
 
 - Saving a model to onnx
@@ -38,47 +42,8 @@ import onnxruntime
 
 from PIL import Image, ImageOps
 
-def to_onnx(model, input_size, batch_size=1,
-        path='outputs/onnx', fname='brn.onnx', test_in=None):
-    #convert the model to onnx format - trial with onnx lib
-    #if speedy:
-    #    fname = 'speedy-'+name
-    #    model.set_fast_inf_mode()
-    #else:
-    #    fname = 'slow-'+name
-    #    model.eval()
+from earlyexitnet.onnx_tools.onnx_helpers import to_onnx
 
-    sv_pnt = os.path.join(path, fname)
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-    if test_in is None:
-        x = torch.randn(batch_size, *input_size)
-    else:
-        x=test_in
-
-    #trying the scripty thing
-    scr_model = torch.jit.script(model)
-    print("PRINTING PYTORCH MODEL SCRIPT")
-    print(scr_model.graph, "\n")
-    ex_out = scr_model(x) # get output of script model
-
-    torch.onnx.export(
-        scr_model,      # model being run
-        x,              # model input (or a tuple for multiple inputs)
-        sv_pnt,         # where to save the model (can be a file or file-like object)
-        export_params=True, # store the trained parameter weights inside the model file
-        opset_version=12,          # the ONNX version to export the model to
-        do_constant_folding=True,  # t/f execute constant folding for optimization
-        example_outputs=ex_out,
-        input_names = ['input'],   # the model's input names
-        output_names = ['exit'],#, 'eeF'], # the model's output names
-        #dynamic_axes={#'input' : {0 : 'batch_size'}, # NOTE not used, variable length axes
-                      #'exit' : {0 : 'exit_size'}#,
-                      #'eeF' : {0 : 'exit_size'}
-                      #}
-    )
-    return sv_pnt
 
 #'/home/localadmin/phd/earlyexitnet/outputs/pre_Trn_bb_2021-07-09_141616/pretrn-joint-8-2021-07-09_142311.pth'
 #'brn-top1ee-bsf-lessOps-trained.onnx'
@@ -218,7 +183,6 @@ def brn_main(md_pth, save_name):
 
     #FIXME remove when done playing with test sets
     return
-
 
     #save to onnx
     print("SAVING MODEL TO ONNX: ", save_name)
