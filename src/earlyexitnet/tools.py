@@ -394,10 +394,13 @@ def save_model(model, path, file_prefix='', seed=None, epoch=None, opt=None,
     print("Saved to:", file_path)
     return file_path
 
-def load_model(model, path, strict=True):
+def load_model(model, path, strict=True, device=None):
     #TODO add "warmstart" - partial reloading of model, useful for backbone pre_training
     #loads the model from the path specified
-    checkpoint = torch.load(path)
+    if device is None:
+        checkpoint = torch.load(path)
+    else:
+        checkpoint = torch.load(path, map_location = device)
     model.load_state_dict(checkpoint['model_state_dict'], strict=strict)
 
     #TODO optionals

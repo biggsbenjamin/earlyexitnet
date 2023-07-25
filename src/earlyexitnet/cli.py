@@ -61,7 +61,15 @@ def test_only(args):
     batch_size_test = args.batch_size_test #test bs in branchynet
     print("Setting up for testing")
     #load in the model from the path
-    load_model(model, args.trained_model_path)
+    
+    # Device setup
+    if torch.cuda.is_available() and args.gpu_target is not None:
+        device = torch.device(f"cuda:{args.gpu_target}")
+    else:
+        device = torch.device("cpu")
+    print("Device:", device)
+    
+    load_model(model, args.trained_model_path, device=device)
     
     num_workers = 1 if args.num_workers is None else args.num_workers
     print(f"Number of workers: {num_workers}")
@@ -353,7 +361,7 @@ def main():
 
     parser.add_argument('-bstr','--batch_size_train',type=int,default=500,
                         help='batch size for the training of the network')
-    parser.add_argument('-bbe','--bb_epochs', metavar='N',type=int, default=1, required=False,
+    parser.add_argument('-bbe','--bb_epochs', metavar='N',type=int, default=0, required=False,
             help='Epochs to train backbone separately, or non ee network')
     parser.add_argument('-jte','--jt_epochs', metavar='n',type=int, default=0, required=False,
             help='epochs to train exits jointly with backbone')
@@ -418,8 +426,9 @@ def main():
 
     # parse the arguments
     args = parser.parse_args()
+    # breakpoint()
 
-    if args.trained_model_path is not None and args.bb_epochs==0 and args.jt_epochs==0:
+    if args.trained_model_path is not None and (args.bb_epochs==0 and args.jt_epochs==0):
         model = test_only(args)
         model_path = args.trained_model_path
     else:
