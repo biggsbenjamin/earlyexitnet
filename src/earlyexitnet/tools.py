@@ -222,7 +222,7 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         self.set_length_accum = np.zeros(bins,dtype=int)
 
     ### functions to use ###
-    def add_val(self,value,accum_count=None,bin_index=None): #adds val(s) for single iteration
+    def add_val(self,value,bin_index=None,accum_count=None): #adds val(s) for single iteration
         if accum_count is None:
             accum_count = self.batch_size
         if isinstance(value,list):

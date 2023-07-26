@@ -72,19 +72,13 @@ class Comparison:
         
         hasExited = torch.zeros([num_batches], dtype=torch.bool)
 
-        exit_counter = [0] * num_exits
-
         start = perf_counter()
         
         if self.test:
             sft_accum = None
         
-        for exit_b in range(num_exits): 
-            index = torch.Tensor([exit_b]).to(batched_results.device).type(torch.int32)
-            result_layer = torch.index_select(batched_results, 0, index) # select exit from [E, B, C] to get [1, B, C]
-
-            result_layer = result_layer.reshape(num_batches,num_classes)# reshape from [B,1,C] to [B,C]
-            
+        for exit_b in range(num_exits):             
+            result_layer = batched_results[exit_b]
             
             if self.test:
                 exit_result, raw_softmax = self.compare_func(result_layer, self.exit_thresholds[exit_b], test=True)
@@ -94,15 +88,15 @@ class Comparison:
                 
             else:
                 exit_result = self.compare_func(result_layer, self.exit_thresholds[exit_b])
-                
+                        
             # do this better by indexing into the arrays with the exit_result booleans 
             # result_layer[exti_result] return a ternsor with only the layers which would've exited
             for batch, isExit in enumerate(exit_result):
                 if isExit and not hasExited[batch]:
-                    self.exit_track.add_val(1, exit_b)
+                    self.exit_track.add_val(1, bin_index=exit_b)
                     self.accu_track.update_correct(result_layer[batch], batched_correct_results[batch], bin_index=exit_b)
                     hasExited[batch] = 1
-                    exit_counter[exit_b] += 1
+                    
         stop = perf_counter()
         
         if self.test:

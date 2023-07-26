@@ -316,34 +316,21 @@ class ResNet8_2EE(ResNet8_backbone):
         self.exits.append(self.end_layers)
 
     # @torch.jit.unused #decorator to skip jit comp
-    # def _forward_training(self, x):
-    #     # TODO make jit compatible - not urgent
-    #     # NOTE broken because returning list()
-    #     res = []
-    #     y = self.init_conv(x)
-    #     res.append(self.exits[0](y))
-    #     # compute remaining backbone layers
-    #     for b in self.backbone:
-    #         y = b(y)
-    #     # final exit
-    #     y = self.end_layers(y)
-    #     res.append(y)
-
-    #     return res
-    
-    
     def _forward_training(self, x):
-        res = None
-        num_batch = x.size(0)
-        for bb, ee in zip(self.backbone, self.exits):
-            x = bb(x)
-            tmp = ee(x)
-            num_classes = tmp.size(1)
-            
-            tmp = tmp.reshape(1, num_batch, num_classes) # resize from [B, C] to [1, B, C] to then stack it along the first dimension
-            res = tmp if res is None else torch.cat((res,tmp), dim=0)
+        # TODO make jit compatible - not urgent
+        # NOTE broken because returning list()
+        y = self.init_conv(x)
+        
+        early_exit = self.exits[0](y)
+        # compute remaining backbone layers
+        for b in self.backbone:
+            y = b(y)
+        # final exit
+        final_exit = self.end_layers(y)
+        
+        res = torch.stack((early_exit, final_exit), dim=0)
         return res
-
+    
     def exit_criterion_top1(self, x): #NOT for batch size > 1
         with torch.no_grad():
             pk = nn.functional.softmax(x, dim=-1)

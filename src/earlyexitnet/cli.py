@@ -182,14 +182,20 @@ def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = Fals
 
 def test(datacoll,model,exits,loss_f,notes_path,args):
 
-    save_raw = args.save_raw_softmax
+    
+    save_raw = args.save_raw_softmax 
+    
+    ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
+    save_path = f"{args.model_name}_singleThresh_{ts}.json"
+    
+    if save_raw:
+        print("Storing the raw model results at", save_path)
 
     elapsed_time, test_stats = run_test(datacoll,model,exits,args.top1_threshold, args.entr_threshold,loss_f,args,save_raw)
         
     print("top1 thrs: {},  entropy thrs: {}".format(args.top1_threshold, args.entr_threshold))
     print("Total time elapsed:", elapsed_time, "s")
     
-    ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
     # with open(notes_path, 'a') as notes:
     #     notes.write("\n#######################################\n")
     #     notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
@@ -210,7 +216,6 @@ def test(datacoll,model,exits,loss_f,notes_path,args):
     
     final_object["test_vals"] = test_stats
     
-    save_path = f"{args.model_name}_singleThresh_{ts}.json"
     
     with open(save_path, 'a') as output:
         if save_raw:
