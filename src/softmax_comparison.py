@@ -19,7 +19,7 @@ def DOCTOR_softmax_from_softmax(softmax: np.array):
   # formula from DOCTOR paper
   g = np.square(softmax).sum(-1)
   
-  return (1 - g)/g
+  return (1 - g)
 
 def DOCTOR_softmax_from_raw(raw_layer: np.array):
   
@@ -32,7 +32,16 @@ def DOCTOR_softmax_from_raw(raw_layer: np.array):
   
   g = (square_exp.sum(-1) / square_sum)
   
-  return (1 - g)/g
+  return (1 - g)
+
+def plot_difficulties(ax, difficulty, layer, bins,difficulties=None, density=False):
+  vals = []
+  labels = []
+  for i in (range(max(difficulty) + 1) if difficulties is None else difficulties):
+    vals.append(layer[difficulty == i])
+    labels.append(f"d{i} {(difficulty == i).sum()}")
+    
+  ax.hist(vals, bins=bins, density=density, histtype='barstacked', label=labels, alpha=0.4)
 
 def main(json_file):
 
@@ -77,7 +86,23 @@ def main(json_file):
   wrong_col = 'red'
 
   # num_exits x num_samples x num_classes
-  correctness = np.argmax(raw_layer, -1 ) == true_vals
+  model_prediction = np.argmax(raw_layer, -1)
+  
+  # discern between values that are wrong and right on single exit
+  correctness = model_prediction == true_vals
+  
+  # construct weighting system where values that are identified as correct earlier are given more weight
+  # for model with 2 exits:
+  # 0 means it was always misclassified, 1 means it was correctly identified at the final exit
+  # 2 means it was identified correactly at first then misclassified (overthinking)
+  # 3 means it was identified correctly both times 
+  difficulty = None
+  for i, exit_layer in enumerate(correctness):
+    weight = 2 ** (num_exits - i - 1)
+    exit_layer = exit_layer * weight
+    difficulty = exit_layer if difficulty is None else difficulty + exit_layer
+  
+  difficulties = [0,1] # only misclassifications in the first exit
 
   # plot the distribution the maximum values of each class
   max_vals = np.max(raw_layer, -1)
@@ -106,6 +131,8 @@ def main(json_file):
     wrong = e_exit[np.invert(correctness[e])]    
     ax.plot(x, fit_kernel(wrong, x, bandwidth=(max_val - min_val)/30), color=wrong_col)
     ax.hist(wrong, bins=bins, density=True, histtype='step', label="wrong", color=wrong_col)
+    
+    plot_difficulties(ax, difficulty, e_exit, bins, density=True, difficulties=difficulties)
     
     ax.set_title(f"exit {e}")
     ax.legend(loc='upper left')
@@ -206,6 +233,9 @@ def main(json_file):
       
       ax.hist(correct_vals, bins=logbins,histtype='step',label=f'correct {correct_vals.shape[0]}',density=True, color=correct_col)
       ax.hist(wrong_vals, bins=logbins, histtype='step', label=f'incorrect {wrong_vals.shape[0]}',density=True, color=wrong_col)
+      
+      plot_difficulties(ax, difficulty, softmax, logbins, density=True, difficulties=difficulties)
+
       
       # plot hists side by side
       # ax.hist([correct_vals, wrong_vals], bins=logbins, label=[f'correct {correct_vals.shape[0]}', f'incorrect {wrong_vals.shape[0]}'])
