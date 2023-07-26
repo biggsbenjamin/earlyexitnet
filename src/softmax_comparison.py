@@ -12,6 +12,28 @@ def fit_kernel(data, x_vals, kernel='gaussian', bandwidth=1):
   probs = model.score_samples(x_vals.reshape(len(x_vals), 1))
   return np.exp(probs)
 
+# def DOCTOR_softmax_from_raw(raw_layer: np.array()):
+  
+  
+def DOCTOR_softmax_from_softmax(softmax: np.array):
+  # formula from DOCTOR paper
+  g = np.square(softmax).sum(-1)
+  
+  return (1 - g)/g
+
+def DOCTOR_softmax_from_raw(raw_layer: np.array):
+  
+  # exp = np.exp(raw_layer)
+  exp = np.power(2, raw_layer)
+  
+  square_exp = np.power(exp, 2)
+  
+  square_sum = np.power(exp.sum(-1), 2)
+  
+  g = (square_exp.sum(-1) / square_sum)
+  
+  return (1 - g)/g
+
 def main(json_file):
 
   # json_file = "./rawSoftmax_b_lenet_se_singleThresh_2023-07-19_153525.json"
@@ -25,6 +47,28 @@ def main(json_file):
   true_vals = data['test_vals']['true_indices']
   raw_layer = data['test_vals']['raw_layer']
 
+
+  # doctor = DOCTOR_softmax_from_raw(np.array(raw_layer))
+  
+  softmax_values = None
+  for func in data['test_vals']['comps']:
+    if func['name'] == "Softmax":
+      softmax_values = func['raw_softmax']
+  
+  
+  # if softmax_values is not None:
+  doctor = DOCTOR_softmax_from_softmax(np.array(softmax_values))
+  data['test_vals']['comps'].append({
+    'name':"doctor sfmtx",
+    'raw_softmax':doctor
+  })
+  
+  doctor = DOCTOR_softmax_from_raw(np.array(raw_layer))
+  data['test_vals']['comps'].append({
+    'name':"doctor raw",
+    'raw_softmax':doctor
+  })
+  
   num_exits = data['test_vals']['num_exits']
 
   num_compares = len(data['test_vals']['comps'])
@@ -112,12 +156,18 @@ def main(json_file):
       softmax = np.array(softmax)
       # separate the maximum values for the correct and incorrect
       
-      if name != "Entropy":
-        softmax = np.max(softmax, -1)
-      else:
-        softmax = (1 / np.log(10)) * softmax
+      logbins =  np.linspace(0, 1, 100)
       
-      # breakpoint()
+      if name == "Entropy":
+        softmax = (1 / np.log(10)) * softmax
+      elif 'doctor' in name:
+        softmax = softmax
+        # automatically enlarge the x axis if doing (1-g)/g instead of only (1-g)
+        if max(softmax) > 1:
+          logbins = np.linspace(0, max(softmax), 100)
+      else:
+        softmax = np.max(softmax, -1)
+      
       
       correct_vals = softmax[correctness[exit_num]]
       wrong_vals = softmax[np.invert(correctness)[exit_num]]
@@ -125,7 +175,6 @@ def main(json_file):
       
       
       # logbins = np.logspace(np.log10(0.1),np.log10(1),100)
-      logbins =  np.linspace(0, 1, 100)
       
       model_c = KernelDensity(bandwidth=0.02, kernel='gaussian')
       model_w = KernelDensity(bandwidth=0.02, kernel='gaussian')
@@ -145,10 +194,15 @@ def main(json_file):
       #   logbins = np.logspace(np.log10(0.1), np.log10(1), 64)
       #   # logbins = np.linspace(0,1,32)
         
-      quants = [0.25, 0.5, 0.75]
-      quantiles = mstats.mquantiles(wrong_vals, prob=quants)
-      for i, q in enumerate(quantiles):
-        ax.axvline(q, 0, color='orange', ls='--', label=f"q {quants[i]*100:.0f}%: {q:.02f}")
+      quants = [0.2, 0.5, 0.8]
+      quantiles_w = mstats.mquantiles(wrong_vals, prob=quants)
+      quantiles_c = mstats.mquantiles(correct_vals, prob=quants)
+      
+      for i, (qw, qc) in enumerate(zip(quantiles_w, quantiles_c)):
+        # ax.axvline(qw, 0, color='orange', ls='--', label=f"qw {quants[i]*100:.0f}%: {qw:.02f}")
+        # ax.axvline(qc, 0, color='green', ls='--', label=f"qc {quants[i]*100:.0f}%: {qc:.02f}")
+        ax.axvline(qw, 0, color='orange',alpha=quants[i], ls='--')
+        ax.axvline(qc, 0, color='green',alpha=quants[i], ls='--')
       
       ax.hist(correct_vals, bins=logbins,histtype='step',label=f'correct {correct_vals.shape[0]}',density=True, color=correct_col)
       ax.hist(wrong_vals, bins=logbins, histtype='step', label=f'incorrect {wrong_vals.shape[0]}',density=True, color=wrong_col)
@@ -161,11 +215,11 @@ def main(json_file):
       # ax.set_yscale('log')
       ax.set_xlabel('threshold value')
       
-      ax.set_ylabel('count')
+      ax.set_ylabel('density')
       ax.set_title(f"exit {exit_num}")
-      ax.legend(loc='upper left')
+      ax.legend()
       
-    fig.set_size_inches(20,15)
+    # fig.set_size_inches(20,15)
   plt.show()
 
 # fig.set_size_inches(6 * num_exits, 4 * num_compares)
