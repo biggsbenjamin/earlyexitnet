@@ -1,0 +1,10 @@
+*.old
+**/__pycache__/
+**/outputs/
+**/outputs_old/
+**/data_test/
+*.pyc
+**/old/**
+*.npy
+
+**/data/

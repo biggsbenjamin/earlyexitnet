@@ -2,15 +2,13 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import mstats
-from sklearn.neighbors import KernelDensity
 import sys
 
-def fit_kernel(data, x_vals, kernel='gaussian', bandwidth=1):
-  model = KernelDensity(bandwidth=bandwidth, kernel=kernel)
-  
-  model.fit(data.reshape(len(data), 1))
-  probs = model.score_samples(x_vals.reshape(len(x_vals), 1))
-  return np.exp(probs)
+from helper.graphs import *
+
+from matplotlib.pyplot import cm
+
+
 
 # def DOCTOR_softmax_from_raw(raw_layer: np.array()):
   
@@ -32,16 +30,19 @@ def DOCTOR_softmax_from_raw(raw_layer: np.array):
   
   g = (square_exp.sum(-1) / square_sum)
   
-  return (1 - g)
+  return g
 
-def plot_difficulties(ax, difficulty, layer, bins,difficulties=None, density=False):
-  vals = []
-  labels = []
-  for i in (range(max(difficulty) + 1) if difficulties is None else difficulties):
-    vals.append(layer[difficulty == i])
-    labels.append(f"d{i} {(difficulty == i).sum()}")
-    
-  ax.hist(vals, bins=bins, density=density, histtype='barstacked', label=labels, alpha=0.4)
+def raw_distance(raw_layer: np.array):
+  
+  max_val = raw_layer.max(-1)
+  max_ind = raw_layer.argmax(-1)
+  
+  num_classes = raw_layer.shape[-1]
+  # breakpoint()
+  avg_vals = (raw_layer.sum(-1) - max_val) / (num_classes - 1)
+  dist = (max_val - avg_vals)
+  # breakpoint()
+  return dist
 
 def main(json_file):
 
@@ -76,6 +77,12 @@ def main(json_file):
   data['test_vals']['comps'].append({
     'name':"doctor raw",
     'raw_softmax':doctor
+  })
+  
+  custom_func = raw_distance(np.array(raw_layer))
+  data['test_vals']['comps'].append({
+    'name':"doctor distance",
+    'raw_softmax':custom_func
   })
   
   num_exits = data['test_vals']['num_exits']
@@ -120,19 +127,19 @@ def main(json_file):
     
     max_val = max(e_exit)
     min_val = min(e_exit)
-    bins = 40
+    bins = 100
     
-    x = np.linspace(min_val, max_val, 100)
+    x = np.linspace(min_val, max_val, bins)
     
     correct = e_exit[correctness[e]]    
     ax.plot(x, fit_kernel(correct, x, bandwidth=(max_val - min_val)/30), color=correct_col)
-    ax.hist(correct, bins=bins, density=True, histtype='step', label="correct", color=correct_col)
+    ax.hist(correct, bins=x, density=True, histtype='step', label="correct", color=correct_col)
     
     wrong = e_exit[np.invert(correctness[e])]    
     ax.plot(x, fit_kernel(wrong, x, bandwidth=(max_val - min_val)/30), color=wrong_col)
-    ax.hist(wrong, bins=bins, density=True, histtype='step', label="wrong", color=wrong_col)
+    ax.hist(wrong, bins=x, density=True, histtype='step', label="wrong", color=wrong_col)
     
-    plot_difficulties(ax, difficulty, e_exit, bins, density=True, difficulties=difficulties)
+    plot_difficulties(ax, difficulty, e_exit, x, density=True, difficulties=difficulties)
     
     ax.set_title(f"exit {e}")
     ax.legend(loc='upper left')
@@ -190,8 +197,8 @@ def main(json_file):
       elif 'doctor' in name:
         softmax = softmax
         # automatically enlarge the x axis if doing (1-g)/g instead of only (1-g)
-        if max(softmax) > 1:
-          logbins = np.linspace(0, max(softmax), 100)
+        if max(softmax) > 1 or max(softmax) < 0:
+          logbins = np.linspace(min(softmax), max(softmax), 100)
       else:
         softmax = np.max(softmax, -1)
       
@@ -199,23 +206,8 @@ def main(json_file):
       correct_vals = softmax[correctness[exit_num]]
       wrong_vals = softmax[np.invert(correctness)[exit_num]]
       
-      
-      
-      # logbins = np.logspace(np.log10(0.1),np.log10(1),100)
-      
-      model_c = KernelDensity(bandwidth=0.02, kernel='gaussian')
-      model_w = KernelDensity(bandwidth=0.02, kernel='gaussian')
-    
-      model_c.fit(correct_vals.reshape(len(correct_vals), 1))
-      model_w.fit(wrong_vals.reshape(len(wrong_vals), 1))
-      
-      probs_c = model_c.score_samples(logbins.reshape(len(logbins), 1))
-      probs_c = np.exp(probs_c)
-      probs_w = model_w.score_samples(logbins.reshape(len(logbins), 1))
-      probs_w = np.exp(probs_w)
-      
-      ax.plot(logbins, probs_c, color=correct_col, ls='--')
-      ax.plot(logbins, probs_w, color=wrong_col, ls='--')
+      ax.plot(logbins, fit_kernel(correct_vals, logbins), color=correct_col, ls='--')
+      ax.plot(logbins, fit_kernel(wrong_vals, logbins), color=wrong_col, ls='--')
       
       # if name == "Base-2 Sub-Softmax":
       #   logbins = np.logspace(np.log10(0.1), np.log10(1), 64)
