@@ -113,10 +113,6 @@ def main(json_file):
 
   # plot the distribution the maximum values of each class
   max_vals = np.max(raw_layer, -1)
-  argmax_vals = np.argmax(raw_layer, -1)
-  
-  
-  comb = np.stack((argmax_vals, max_vals, correctness), -1)
   
   fig1, axis1 = plt.subplots(nrows=num_exits)
   
@@ -131,22 +127,14 @@ def main(json_file):
     
     x = np.linspace(min_val, max_val, bins)
     
-    correct = e_exit[correctness[e]]    
-    ax.plot(x, fit_kernel(correct, x, bandwidth=(max_val - min_val)/30), color=correct_col)
-    ax.hist(correct, bins=x, density=True, histtype='step', label="correct", color=correct_col)
-    
-    wrong = e_exit[np.invert(correctness[e])]    
-    ax.plot(x, fit_kernel(wrong, x, bandwidth=(max_val - min_val)/30), color=wrong_col)
-    ax.hist(wrong, bins=x, density=True, histtype='step', label="wrong", color=wrong_col)
+    plot_right_wrong(ax, e_exit, correctness[e], x)
     
     plot_difficulties(ax, difficulty, e_exit, x, density=True, difficulties=difficulties)
     
     ax.set_title(f"exit {e}")
     ax.legend(loc='upper left')
   
-  sorted_raw = np.asarray([c[c[:,0].argsort()] for c in comb])
-  
-  grouped_by_class = [np.split(s[:,1:], np.unique(s[:,0], return_index=True)[1][1:]) for s in sorted_raw]
+  grouped_by_class = group_by_class(raw_layer, correctness)
   
   fig2, axis2 = plt.subplots(nrows=num_exits)
   fig2.suptitle(f"{title_name} Per class final layer distribution")
@@ -202,42 +190,11 @@ def main(json_file):
       else:
         softmax = np.max(softmax, -1)
       
-      
-      correct_vals = softmax[correctness[exit_num]]
-      wrong_vals = softmax[np.invert(correctness)[exit_num]]
-      
-      ax.plot(logbins, fit_kernel(correct_vals, logbins), color=correct_col, ls='--')
-      ax.plot(logbins, fit_kernel(wrong_vals, logbins), color=wrong_col, ls='--')
-      
-      # if name == "Base-2 Sub-Softmax":
-      #   logbins = np.logspace(np.log10(0.1), np.log10(1), 64)
-      #   # logbins = np.linspace(0,1,32)
-        
-      quants = [0.2, 0.5, 0.8]
-      quantiles_w = mstats.mquantiles(wrong_vals, prob=quants)
-      quantiles_c = mstats.mquantiles(correct_vals, prob=quants)
-      
-      for i, (qw, qc) in enumerate(zip(quantiles_w, quantiles_c)):
-        # ax.axvline(qw, 0, color='orange', ls='--', label=f"qw {quants[i]*100:.0f}%: {qw:.02f}")
-        # ax.axvline(qc, 0, color='green', ls='--', label=f"qc {quants[i]*100:.0f}%: {qc:.02f}")
-        ax.axvline(qw, 0, color='orange',alpha=quants[i], ls='--')
-        ax.axvline(qc, 0, color='green',alpha=quants[i], ls='--')
-      
-      ax.hist(correct_vals, bins=logbins,histtype='step',label=f'correct {correct_vals.shape[0]}',density=True, color=correct_col)
-      ax.hist(wrong_vals, bins=logbins, histtype='step', label=f'incorrect {wrong_vals.shape[0]}',density=True, color=wrong_col)
+      plot_right_wrong(ax, softmax, correctness[exit_num], logbins)
       
       plot_difficulties(ax, difficulty, softmax, logbins, density=True, difficulties=difficulties)
 
       
-      # plot hists side by side
-      # ax.hist([correct_vals, wrong_vals], bins=logbins, label=[f'correct {correct_vals.shape[0]}', f'incorrect {wrong_vals.shape[0]}'])
-
-      # if name != "Base-2 Sub-Softmax":
-      # ax.set_xscale('log')
-      # ax.set_yscale('log')
-      ax.set_xlabel('threshold value')
-      
-      ax.set_ylabel('density')
       ax.set_title(f"exit {exit_num}")
       ax.legend()
       
