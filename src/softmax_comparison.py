@@ -17,32 +17,44 @@ def DOCTOR_softmax_from_softmax(softmax: np.array):
   # formula from DOCTOR paper
   g = np.square(softmax).sum(-1)
   
-  return (1 - g)
+  return g
 
 def DOCTOR_softmax_from_raw(raw_layer: np.array):
   
   # exp = np.exp(raw_layer)
   exp = np.power(2, raw_layer)
   
-  square_exp = np.power(exp, 2)
+  square_exp = np.power(exp, 3)
   
-  square_sum = np.power(exp.sum(-1), 2)
+  square_sum = np.power(exp.sum(-1), 3)
   
   g = (square_exp.sum(-1) / square_sum)
   
   return g
 
+# def raw_distance(raw_layer: np.array):
+  
+#   max_val = raw_layer.max(-1)
+#   max_ind = raw_layer.argmax(-1)
+  
+#   num_classes = raw_layer.shape[-1]
+#   # breakpoint()
+#   avg_vals = (raw_layer.sum(-1) - max_val) / (num_classes - 1)
+#   dist = (max_val - avg_vals)
+#   # breakpoint()
+#   return dist
+
 def raw_distance(raw_layer: np.array):
   
-  max_val = raw_layer.max(-1)
-  max_ind = raw_layer.argmax(-1)
+  sorted_vals = np.sort(raw_layer, axis=-1)
   
-  num_classes = raw_layer.shape[-1]
-  # breakpoint()
-  avg_vals = (raw_layer.sum(-1) - max_val) / (num_classes - 1)
-  dist = (max_val - avg_vals)
+  max_val = sorted_vals[:,:, -1]
+  second_max = sorted_vals[:, :, -2]
+  
+  dist = max_val - second_max
   # breakpoint()
   return dist
+
 
 def main(json_file):
 

@@ -39,9 +39,13 @@ def plot_difficulties(ax, difficulty, layer, bins,difficulties=None, density=Fal
     
   ax.hist(vals, bins=bins, density=density, histtype='barstacked', label=labels, alpha=0.4, color = colours)
 
-def plot_hist_kernel(ax, xax, vals, col=None, label=None):
-  ax.plot(xax, fit_kernel(vals, xax), color=col, ls='--')
-  ax.hist(vals, bins=xax,histtype='step',label=label,density=True, color=col)
+def plot_hist_kernel(ax, vals, xax=None, col=None, label=None, hist=True, ls='--'):
+  if xax is None:
+    xax = np.linspace(min(vals), max(vals), 100)
+
+  ax.plot(xax, fit_kernel(vals, xax), color=col, label=label,ls=ls)
+  if hist:
+    ax.hist(vals, bins=xax,histtype='step',density=True, color=col)
 
 
 def plot_right_wrong(ax, values, correctness, xax=None, right_col='blue', wrong_col='red',quants = [0.2, 0.5, 0.8]):
@@ -50,8 +54,8 @@ def plot_right_wrong(ax, values, correctness, xax=None, right_col='blue', wrong_
     correct_vals = values[correctness]
     wrong_vals = values[np.invert(correctness)]
 
-    plot_hist_kernel(ax, xax, correct_vals, right_col, f'correct {correct_vals.shape[0]}')
-    plot_hist_kernel(ax, xax, wrong_vals, wrong_col, f'incorrect {wrong_vals.shape[0]}')
+    plot_hist_kernel(ax, correct_vals, xax, right_col, f'correct {correct_vals.shape[0]}')
+    plot_hist_kernel(ax, wrong_vals, xax, wrong_col, f'incorrect {wrong_vals.shape[0]}')
     
     ax.set_xlabel('threshold value')      
     ax.set_ylabel('density')
