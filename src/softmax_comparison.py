@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import mstats
 import sys
-
+import argparse
 from helper.graphs import *
 
 from matplotlib.pyplot import cm
@@ -91,7 +91,7 @@ def plot_false_positives(
         cax.legend(fontsize="small")
 
 
-def main(json_file):
+def main(json_file, funcs=None):
     # json_file = "./rawSoftmax_b_lenet_se_singleThresh_2023-07-19_153525.json"
     # json_file = "./b_lenet_cifar_singleThresh_2023-07-20_172520.json"
 
@@ -231,78 +231,101 @@ def main(json_file):
     fig5, fps_ax = plt.subplots(1, 1)
     fps_cost_ax = fps_ax.twinx()
 
+    print("Running analysis on different confidence functions")
     # ANALISE VARIOUS SOFTMAX FUNCTIONS
     for row, function in enumerate(data["test_vals"]["comps"]):
-        sftmx = function["raw_softmax"]
         name = function["name"]
+        print(f"{row} {name}")
+        if funcs is None or row in funcs:
+            sftmx = function["raw_softmax"]
 
-        fig, axis = plt.subplots(ncols=2, nrows=num_exits - 1, squeeze=False)
-
-        fig.suptitle(f"{title_name} {name}")
-
-        for exit_num, softmax in enumerate(sftmx[:-1]):
-            ax = axis[exit_num][0]
-            softmax = np.array(softmax)
-            # separate the maximum values for the correct and incorrect
-
-            logbins = np.linspace(0, 1, 100)
-
-            if name == "Entropy":
-                softmax = (1 / np.log(10)) * softmax
-                softmax = 1 - softmax
-            elif "doctor" in name:
-                softmax = softmax
-                # automatically enlarge the x axis if doing (1-g)/g instead of only (1-g)
-                if max(softmax) > 1 or max(softmax) < 0:
-                    logbins = np.linspace(min(softmax), max(softmax), 100)
-            else:
-                softmax = np.max(softmax, -1)
-
-            plot_right_wrong(ax, softmax, correctness[exit_num], logbins)
-
-            plot_difficulties(
-                ax,
-                difficulty,
-                softmax,
-                logbins,
-                density=True,
-                difficulties=difficulties,
+            fig, axis = plt.subplots(
+                ncols=2, nrows=num_exits - 1, squeeze=False
             )
 
-            # axis for false positive plotting
-            fp_ax = axis[exit_num][1]
-            fp_cost_ax = fp_ax.twinx()
-            # keep only those values that are correct at the next exit
-            # could be changed to keep only values that are correct at the final exit
-            relative_correctness = correctness[exit_num][
-                correctness[exit_num + 1]
-            ]
-            plot_false_positives(
-                fp_ax,
-                logbins,
-                softmax[correctness[exit_num + 1]],
-                relative_correctness,
-                normalised=False,
-                cax=fp_cost_ax,
-            )
-            plot_false_positives(
-                fps_ax,
-                logbins,
-                softmax,
-                correctness[exit_num],
-                label_prefix=name + " ",
-                # cax=fps_cost_ax,
-            )
+            fig.suptitle(f"{title_name} {row}:{name}")
 
-            ax.set_title(f"exit {exit_num}")
-            ax.legend()
+            for exit_num, softmax in enumerate(sftmx[:-1]):
+                ax = axis[exit_num][0]
+                softmax = np.array(softmax)
+                # separate the maximum values for the correct and incorrect
 
-        fig.set_size_inches(14, 6)
+                logbins = np.linspace(0, 1, 100)
+
+                if name == "Entropy":
+                    softmax = (1 / np.log(10)) * softmax
+                    softmax = 1 - softmax
+                elif "doctor" in name:
+                    softmax = softmax
+                    # automatically enlarge the x axis if doing (1-g)/g instead of only (1-g)
+                    if max(softmax) > 1 or max(softmax) < 0:
+                        logbins = np.linspace(min(softmax), max(softmax), 100)
+                else:
+                    softmax = np.max(softmax, -1)
+
+                plot_right_wrong(ax, softmax, correctness[exit_num], logbins)
+
+                plot_difficulties(
+                    ax,
+                    difficulty,
+                    softmax,
+                    logbins,
+                    density=True,
+                    difficulties=difficulties,
+                )
+
+                # axis for false positive plotting
+                fp_ax = axis[exit_num][1]
+                fp_cost_ax = fp_ax.twinx()
+                # keep only those values that are correct at the next exit
+                # could be changed to keep only values that are correct at the final exit
+                relative_correctness = correctness[exit_num][
+                    correctness[exit_num + 1]
+                ]
+                plot_false_positives(
+                    fp_ax,
+                    logbins,
+                    softmax[correctness[exit_num + 1]],
+                    relative_correctness,
+                    normalised=True,
+                    cax=fp_cost_ax,
+                )
+                plot_false_positives(
+                    fps_ax,
+                    logbins,
+                    softmax[correctness[exit_num + 1]],
+                    relative_correctness,
+                    label_prefix=name + " ",
+                    cax=fps_cost_ax,
+                )
+
+                ax.set_title(f"exit {exit_num}")
+                ax.legend()
+
+            fig.set_size_inches(14, 6)
     plt.show()
 
 
 # fig.set_size_inches(6 * num_exits, 4 * num_compares)
 
 if __name__ == "__main__":
-    print(f"Analysis on: {sys.argv[1]}")
-    main(sys.argv[1])
+    parser = argparse.ArgumentParser(description="Early Exit Data Analyzer")
+    parser.add_argument(
+        "-f",
+        "--filename",
+        required=True,
+        help="Path to the data to be analyzed and plotted",
+    )
+    parser.add_argument(
+        "-fc",
+        "--functions",
+        required=False,
+        nargs="+",
+        type=int,
+        help="Index into the functions to be used in analysis",
+    )
+
+    args = parser.parse_args()
+
+    print(f"Analysis on: {args.filename}")
+    main(args.filename, funcs=args.functions)
