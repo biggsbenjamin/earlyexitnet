@@ -164,7 +164,9 @@ class CIFAR10DataColl(DataColl):
             tfs_list.append(custom_trfm)
             mean=(0.4913997551666284*255, 0.48215855929893703*255, 0.4465309133731618*255)
             std=(0.24703225141799082*15.968719, 0.24348516474564*15.968719, 0.26158783926049628*15.968719)
-        tfs_list = tfs_list + [transforms.RandomHorizontalFlip(),
+        tfs_list = tfs_list + [
+                transforms.RandomCrop(32, 4),
+                transforms.RandomHorizontalFlip(),
                 transforms.RandomRotation(degrees=10),
                 transforms.ColorJitter(brightness=0.5),
                 #transforms.Normalize(mean=mean,std=std)
@@ -187,7 +189,12 @@ class CIFAR100DataColl(DataColl):
     def _load_sets(self):
         #child version of function, CIFAR100 specific
         #standard transform for CIFAR100
-        self.tfs = transforms.Compose([transforms.ToTensor()])
+        self.tfs = transforms.Compose([transforms.ToTensor(),
+            transforms.RandomCrop(32, 4),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(degrees=10),
+            transforms.ColorJitter(brightness=0.5)]
+            )
         #full training set, no normalisation
         self.full_train_set = torchvision.datasets.CIFAR100('../data/cifar100',
             download=True, train=True, transform=self.tfs)

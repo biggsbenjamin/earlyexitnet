@@ -45,8 +45,17 @@ from datetime import datetime as dt
 def get_num_correct(preds, labels):
     return preds.argmax(dim=1).eq(labels).sum().item()
 
-def get_model(model_str):
+def get_model(model_str,dataset_str):
     #set up the model specified in args
+
+    if dataset_str in ['mnist','cifar10']:
+        classes=10
+    elif dataset_str == 'cifar100':
+        classes=100
+    else:
+        raise NameError("Dataset not supported, check name:",
+                        args.dataset)
+
     if model_str == 'lenet':
         # FIXME
         raise NameError("Training this model not supported")
@@ -69,13 +78,12 @@ def get_model(model_str):
         model = B_Lenet_se()
     elif model_str == 'b_lenet_cifar':
         model = B_Lenet_cifar()
-        #print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
     elif model_str == 'resnet8':
         model = ResNet8()
     elif model_str == 'resnet8_bb':
-        model = ResNet8_backbone()
+        model = ResNet8_backbone(num_classes=classes)
     elif model_str == 'resnet8_2ee':
-        model = ResNet8_2EE()
+        model = ResNet8_2EE(num_classes=classes)
     else:
         raise NameError("Model not supported, check name:",model_str)
     print("Model done:", model_str)

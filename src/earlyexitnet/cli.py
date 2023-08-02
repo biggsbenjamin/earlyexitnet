@@ -14,7 +14,8 @@ from earlyexitnet.testing_tools.test import Tester
 
 # import dataloaders from tools
 from earlyexitnet.tools import \
-    MNISTDataColl,CIFAR10DataColl,load_model,path_check
+    MNISTDataColl,CIFAR10DataColl,CIFAR100DataColl, \
+    load_model,path_check
 
 from earlyexitnet.onnx_tools.onnx_helpers import \
     to_onnx
@@ -42,7 +43,7 @@ def get_exits(model_str):
     return exits
 
 def test_only(args):
-    model = get_model(args.model_name)
+    model = get_model(args.model_name,args.dataset)
     # get number of exits
     if hasattr(model,'exit_num'):
         exits=model.exit_num
@@ -68,6 +69,8 @@ def test_only(args):
         datacoll = MNISTDataColl(batch_size_test=batch_size_test)
     elif args.dataset == 'cifar10':
         datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,no_scaling=args.no_scaling)
+    elif args.dataset == 'cifar100':
+        datacoll = CIFAR100DataColl(batch_size_test=batch_size_test)
     else:
         raise NameError("Dataset not supported, check name:",
                         args.dataset)
@@ -157,7 +160,7 @@ Main training and testing function run from the cli
 """
 def train_n_test(args):
     #set up the model specified in args
-    model = get_model(args.model_name)
+    model = get_model(args.model_name,args.dataset)
     # get number of exits
     if hasattr(model,'exit_num'):
         exits=model.exit_num
@@ -190,6 +193,11 @@ def train_n_test(args):
                 v_split=validation_split,num_workers=num_workers)
     elif args.dataset == 'cifar10':
         datacoll = CIFAR10DataColl(batch_size_train=batch_size_train,
+                batch_size_test=batch_size_test,normalise=normalise,
+                v_split=validation_split,num_workers=num_workers,
+                no_scaling=args.no_scaling)
+    elif args.dataset == 'cifar100':
+        datacoll = CIFAR100DataColl(batch_size_train=batch_size_train,
                 batch_size_test=batch_size_test,normalise=normalise,
                 v_split=validation_split,num_workers=num_workers,
                 no_scaling=args.no_scaling)
