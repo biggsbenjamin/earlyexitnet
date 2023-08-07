@@ -141,7 +141,8 @@ class B_Lenet(nn.Module):
             pk = nn.functional.softmax(x, dim=-1)
             top1 = torch.max(pk) #x)
             return top1 > self.exit_threshold
-
+        
+    @torch.jit.unused #decorator to skip jit comp (needed for onnx conversion)
     def _forward_training(self, x):
         res = None
         num_batch = x.size(0)

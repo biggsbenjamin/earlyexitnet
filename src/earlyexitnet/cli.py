@@ -250,7 +250,7 @@ def test_single(datacoll,model,exits,loss_f,notes_path,args):
         
     ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
     if not save_raw: # when saving raw output, txt file doesn't make sense
-        with open(get_save_path("test", notes_path, filetype='txt'), 'a') as notes:
+        with open(get_save_path("test", notes_path, filetype='txt', timestamp=False), 'a') as notes:
             notes.write("\n#######################################\n")
             notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
             notes.write(f"on dataset {args.dataset}:\n")

@@ -315,7 +315,7 @@ class ResNet8_2EE(ResNet8_backbone):
         #final exit
         self.exits.append(self.end_layers)
 
-    # @torch.jit.unused #decorator to skip jit comp
+    @torch.jit.unused #decorator to skip jit comp (required for onnx conversion)
     def _forward_training(self, x):
         # TODO make jit compatible - not urgent
         # NOTE broken because returning list()

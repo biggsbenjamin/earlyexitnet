@@ -319,13 +319,40 @@ class AccuTracker(Tracker):
         self.set_length = set_length
         #init bins
         self.bin_num = bins
-        self.val_bins = np.zeros(bins,dtype=np.float64)
+        self.val_bins = np.zeros(bins,dtype=int)
         self.set_length_accum = np.zeros(bins,dtype=int)
     def get_num_correct(self, preds, labels):
         #predictions from model (not one hot), correct labels        
         return preds.argmax(dim=-1).eq(labels).sum().item()
 
     ### functions to use ###
+    
+    def add_val(self,value,accum_count=None,bin_index=None):
+        if accum_count is None:
+            accum_count = self.batch_size
+        #adds val(s) for single iteration
+        if isinstance(value,list):
+            assert len(value) == self.bin_num, "val list length mismatch {} to {}".format(
+                                                                len(value),self.bin_num)
+            # NOTE having to add loop to get around cpu/gpu mismatch
+            for idx,v in enumerate(value):
+                self.val_bins[idx] = self.val_bins[idx] + v
+            self.set_length_accum = self.set_length_accum + accum_count
+            return
+
+        if bin_index is None and self.bin_num == 1:
+            bin_index = 0
+        elif bin_index is not None:
+            assert bin_index < self.bin_num, "index out of range for adding individual loss"
+        self.val_bins[bin_index] += value
+        self.set_length_accum[bin_index] += accum_count
+        return
+
+    def update_correct(self,result,label,
+            accum_count=None,bin_index=None): #for single iteration
+        if accum_count is None:
+            accum_count = self.batch_size
+    
     def update_correct(self,result,label,bin_index=None): #for single iteration        
         if bin_index is None and len(result) > 1 and self.bin_num > 1:
             count = [self.get_num_correct(val,label) for val in result]
