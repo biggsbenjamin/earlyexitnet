@@ -14,7 +14,7 @@ from earlyexitnet.models.Branchynet import \
 # NOTE models that don't output a list (over exits) won't work
 #from earlyexitnet.models.Lenet import Lenet
 from earlyexitnet.models.Testnet import \
-    Testnet, BrnFirstExit, BrnSecondExit, Backbone_se
+    Testnet, BrnFirstExit, BrnSecondExit, Backbone_se, BrnFirstExit_se
 # Non ee models
 from earlyexitnet.models.ResNet8 import ResNet8,ResNet8_backbone
 # EE resnet models for cifar10

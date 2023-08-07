@@ -51,11 +51,17 @@ cmake version required >= 3.1 and can be installed to conda using `conda install
 
 `python -m earlyexitnet.cli -m b_lenet_se -bbe 50 -jte 30 -rn "run notes example" -t1 0.75 -entr 0.01`
 
-## Test Only Example
+## Test Single Example
 
 `python -m earlyexitnet.cli -m b_lenet -mp /path/to/saved/model.pth -rn "run notes example" -t1 0.75 -entr 0.01`
 
 This sets the top1 (maximum softmax) threshold to 0.75 and the entropy threshold to 0.01.
+
+## Test Multiple Example
+
+`python -m earlyexitnet.cli -m b_lenet -mp /path/to/saved/model.pth -rn "run notes example" -tr 0.2 0.99 -ts 0.1`
+
+This performs tests on the given model varying the threshold value linearly in the given range (`tr` 0.2 - 0.99) with a step of 0.1
 
 ## Convert Model to ONNX Example
 

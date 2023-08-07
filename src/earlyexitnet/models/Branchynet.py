@@ -141,20 +141,22 @@ class B_Lenet(nn.Module):
             pk = nn.functional.softmax(x, dim=-1)
             top1 = torch.max(pk) #x)
             return top1 > self.exit_threshold
-
-    @torch.jit.unused #decorator to skip jit comp
+        
+    @torch.jit.unused #decorator to skip jit comp (needed for onnx conversion)
     def _forward_training(self, x):
-        #TODO make jit compatible - not urgent
-        #broken because returning list()
-        res = []
+        res = None
+        num_batch = x.size(0)
         for bb, ee in zip(self.backbone, self.exits):
             x = bb(x)
-            res.append(ee(x))
+            tmp = ee(x)
+            num_classes = tmp.size(1)
+            
+            tmp = tmp.reshape(1, num_batch, num_classes) # resize from [B, C] to [1, B, C] to then stack it along the first dimension
+            res = tmp if res is None else torch.cat((res,tmp), dim=0)
         return res
 
     def forward(self, x):
         #std forward function - add var to distinguish be test and inf
-
         if self.fast_inference_mode:
             for bb, ee in zip(self.backbone, self.exits):
                 x = bb(x)
@@ -265,6 +267,7 @@ class B_Lenet_se(B_Lenet):
 #cifar10 version - harder data set
 class B_Lenet_cifar(B_Lenet_fcn):
     def _build_backbone(self):
+    
         #NOTE changed padding from 4 to 2
         # changed input number of channels to be 3
         strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=2)
