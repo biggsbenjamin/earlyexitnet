@@ -83,31 +83,36 @@ class Comparison:
                     else raw_softmax
                 )
 
+                # compute mask of values which have exited now and haven't exited before
+                mask = torch.logical_and(exit_result, torch.logical_not(hasExited))
+                # compute how many values exited
+                exit_size = mask.sum().item()
+                exited_vec = result_layer[mask]
+                truth_vec = batched_correct_results[mask]
+                # update which values have exited
+                hasExited = torch.logical_or(hasExited, mask)
             else:
+                # don't care about results of the computations for those values which have exited already
+                # perform operation only on values not yet exited
+                not_exit_mask = torch.logical_not(hasExited)
                 exit_result = self.compare_func(
-                    result_layer, self.exit_thresholds[exit_b]
+                    result_layer[not_exit_mask],
+                    self.exit_thresholds[exit_b],
                 )
+                exit_size = exit_result.sum().item()
+                # tensor containing the values that have exited
+                # first index those values which hadn't already exited
+                # then index those values which now have exited (the second mask doesn't make sense without the first one)
+                exited_vec = (result_layer[not_exit_mask])[exit_result]
+                truth_vec = (batched_correct_results[not_exit_mask])[exit_result]
+                # update which values have exited
+                # use the same mask as before to update only those values for which the computation was performed
+                hasExited[not_exit_mask] = exit_result
 
-            # compute mask of values which have exited now and haven't exited before
-            mask = torch.logical_and(exit_result, torch.logical_not(hasExited))
-            # compute how many values exited
-            exit_size = mask.sum().item()
-            self.exit_track.add_val(exit_size, bin_index=exit_b)
             # compute how many values are correctly identified
-            correct = (
-                (
-                    result_layer[mask].argmax(dim=-1)
-                    == batched_correct_results[mask]
-                )
-                .sum()
-                .item()
-            )
-            self.accu_track.add_val(
-                correct, accum_count=exit_size, bin_index=exit_b
-            )
-
-            # update which values have exited
-            hasExited = torch.logical_or(hasExited, mask)
+            correct = (exited_vec.argmax(dim=-1) == truth_vec).sum().item()
+            self.exit_track.add_val(exit_size, bin_index=exit_b)
+            self.accu_track.add_val(correct, accum_count=exit_size, bin_index=exit_b)
 
         stop = perf_counter()
 
@@ -199,12 +204,8 @@ class Tester:
 
             # set up stat trackers
             # samples exited
-            self.exit_track_top1 = Tracker(
-                self.batch_size, exits, self.sample_total
-            )
-            self.exit_track_entr = Tracker(
-                self.batch_size, exits, self.sample_total
-            )
+            self.exit_track_top1 = Tracker(self.batch_size, exits, self.sample_total)
+            self.exit_track_entr = Tracker(self.batch_size, exits, self.sample_total)
             # individual accuracy over samples exited
             self.accu_track_top1 = AccuTracker(self.batch_size, exits)
             self.accu_track_entr = AccuTracker(self.batch_size, exits)
@@ -253,9 +254,7 @@ class Tester:
             ]
 
         # total exit accuracy over the test data
-        self.accu_track_totl = AccuTracker(
-            test_dl.batch_size, exits, self.sample_total
-        )
+        self.accu_track_totl = AccuTracker(test_dl.batch_size, exits, self.sample_total)
 
         self.top1_pc = None  # % exit for top1 confidence
         self.entr_pc = None  # % exit for entropy confidence
@@ -281,9 +280,7 @@ class Tester:
         exit_mask = entr.lt(thr)
         return exit_mask
 
-    def _thr_compare_(
-        self, exit_track, accu_track, results, gnd_trth, thrs, thr_func
-    ):
+    def _thr_compare_(self, exit_track, accu_track, results, gnd_trth, thrs, thr_func):
         # generate all false mask
         prev_mask = torch.tensor(
             [False] * self.batch_size, dtype=torch.bool, device=self.device
@@ -311,9 +308,7 @@ class Tester:
         self, layer: torch.Tensor, thresh: float, test=False
     ) -> bool:
         softmax = nn.functional.softmax(layer, dim=-1)
-        entr = -torch.sum(
-            torch.nan_to_num(softmax * torch.log(softmax)), dim=-1
-        )
+        entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)), dim=-1)
 
         if test:
             return entr < thresh, entr
@@ -450,9 +445,7 @@ class Tester:
                     # print("softmax exit {}: {}".format(i, softmax))
                     sftmx_max = torch.max(softmax)
                     print("exit {} max softmax: {}".format(i, sftmx_max))
-                    entr = -torch.sum(
-                        torch.nan_to_num(softmax * torch.log(softmax))
-                    )
+                    entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
                     print("exit {} entropy: {}".format(i, entr))
                     # print("exit CE loss: {}".format(loss_f(exit,yb)))
 
@@ -463,9 +456,7 @@ class Tester:
 
         if self.comp_funcs is not None:
             for comp in self.comp_funcs:
-                return_val["comps"].append(
-                    self.comparators[comp].get_comp_info()
-                )
+                return_val["comps"].append(self.comparators[comp].get_comp_info())
         else:
             for comp in self.comparators:
                 return_val["comps"].append(comp.get_comp_info())
@@ -473,9 +464,7 @@ class Tester:
         return_val["num_exits"] = self.exits
         return_val["num_samples"] = self.sample_total * self.test_dl.batch_size
         return_val["batch_size"] = self.test_dl.batch_size
-        return_val["accu_per_exit"] = self.accu_track_totl.get_accu(
-            return_list=True
-        )
+        return_val["accu_per_exit"] = self.accu_track_totl.get_accu(return_list=True)
 
         if self.save_raw:
             return_val[
@@ -505,7 +494,5 @@ class Tester:
             print("### TEST FINISHED ###")
 
         # accuracy of each exit over FULL data set
-        print(
-            "Total Accuracy:", self.accu_track_totl.get_accu(return_list=True)
-        )
+        print("Total Accuracy:", self.accu_track_totl.get_accu(return_list=True))
         # TODO save test stats along with link to saved model
