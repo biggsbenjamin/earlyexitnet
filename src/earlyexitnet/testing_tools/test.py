@@ -366,11 +366,11 @@ class Tester:
         # breakpoint()
         if test:
             return (
-                torch.Tensor(max_exp > threshes),
+                torch.BoolTensor(max_exp > threshes, type=bool),
                 torch.Tensor(exp.get_val()) / torch.Tensor(sums.get_val()),
             )
         else:
-            return torch.Tensor(max_exp > threshes)
+            return torch.BoolTensor(max_exp > threshes)
 
     def _test_multi_exit(self):
         self.model.eval()
