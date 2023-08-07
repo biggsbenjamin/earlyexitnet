@@ -403,7 +403,7 @@ def train_n_test(args):
 Main function that sorts out the CLI args and runs training and testing function.
 """
 def main():
-    parser = argparse.ArgumentParser(description="Early Exit CLI")
+    parser = argparse.ArgumentParser(description="Early Exit CLI", formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument('-m','--model_name',
             required=True, help='select the model name - see training model')
@@ -436,7 +436,7 @@ def main():
     parser.add_argument('-np', '--notes_path', type=path_check, required=False,
             help='Path to location for notes to be saved')
     parser.add_argument('-cf','--confidence_function',required=False,nargs='+', type=int,
-            help='Choose which function to be used when determining the confidence of the network at a given exit, pick one or many')
+            help='Choose which function to be used when determining the confidence of the network at a given exit, pick one or many.\n0 Entropy\n1 Softmax\n2 Trunc Base-2 Softmax\n3 Non-Trunc Base-2 Softmax\n4 Base-2 Sub-Softmax\n')
 
 
     #parser.add_argument('--seed', metavar='N', type=int, default=random.randint(0,2**32-1),

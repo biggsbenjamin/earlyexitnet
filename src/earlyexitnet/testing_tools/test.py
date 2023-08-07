@@ -196,12 +196,6 @@ class Tester:
 
         self.batch_size = test_dl.batch_size
         if exits > 1:
-            # TODO make thresholds a more flexible param
-            # setting top1acc threshold for exiting (final exit set to 0)
-            # self.top1acc_thresholds = [0.995,0]
-            # setting entropy threshold for exiting (final exit set to LARGE)
-            # self.entropy_thresholds = [0.025,1000000]
-
             # set up stat trackers
             # samples exited
             self.exit_track_top1 = Tracker(self.batch_size, exits, self.sample_total)
