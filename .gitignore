@@ -18,3 +18,4 @@ build/
 *.egg-info/
 
 *.json
+*.txt

@@ -47,7 +47,30 @@ def get_exits(model_str):
 
     return exits
 
+def get_save_path(model_name, notes_path, timestamp=True, desc=None, show=True, filetype='json'):
+    save_path = model_name
+    if desc is not None:
+        save_path += f"_{desc}"
+    if timestamp:
+        ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
+        save_path += f"_{ts}"
+    
+    save_path += f'.{filetype}'
+    
+    save_path = os.path.join(notes_path,save_path)
+    if show:
+        print("Storing the test results at", save_path)
+    return save_path
+
 def test_only(args):
+    """Given the parameters passed in the command line, run tests on a given model
+
+    Args:
+        args: CLI arguments
+
+    Returns:
+        None
+    """
     model = get_model(args.model_name)
     # get number of exits
     if hasattr(model,'exit_num'):
@@ -85,17 +108,17 @@ def test_only(args):
     if args.dataset == 'mnist':
         datacoll = MNISTDataColl(batch_size_test=batch_size_test,num_workers=num_workers)
     elif args.dataset == 'cifar10':
-        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,num_workers=num_workers)
-        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,no_scaling=args.no_scaling)
+        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,num_workers=num_workers, no_scaling=args.no_scaling)
     else:
         raise NameError("Dataset not supported, check name:",
                         args.dataset)
     # path to notes write up
-    if args.notes_path is None:
-        notes_path = os.path.join(
-            os.path.split(args.trained_model_path)[0],'notes.txt')
-    else:
+    if args.notes_path is not None:
         notes_path = args.notes_path
+    else:
+        notes_path = os.path.join(os.path.split(args.trained_model_path)[0],'jsons')
+        if not os.path.exists(notes_path):
+            os.makedirs(notes_path)
         
         
     if args.threshold_range is not None and args.threshold_step is not None:
@@ -105,9 +128,20 @@ def test_only(args):
             raise NameError("Invalid amount of value for the threshold range:", len(args.threshold_range))
     else:
         # RUN THE MODEL OVER TEST DATASET
-        test(datacoll,model,exits,loss_f,notes_path,args)
+        test_single(datacoll,model,exits,loss_f,notes_path,args)
 
 def test_multiple(datacoll,model,exits,loss_f,notes_path,args):
+    """Run multiples tests on a given model, varying the ealy-exit threshold linearly in a given range, 
+    with a given step. Save the test results in JSON file
+    
+    Args:
+        datacoll: Dataloader object
+        model : Loader model object
+        exits (_int_) : Number of exits for the given model
+        loss_f : Loss function (unused)
+        notes_path : Optional custom path for saving the output of the test
+        args : CLI arguments
+    """
     step = args.threshold_step
     min_thr, max_thr = args.threshold_range
     
@@ -129,8 +163,6 @@ def test_multiple(datacoll,model,exits,loss_f,notes_path,args):
         running_time += elapsed_time
         total_time = int((float(running_time) / (i+1)) * num_tests)
 
-    ts = dt.now().strftime("%y-%m-%d_%H%M%S")
-    
     final_object = {}
     final_object["model"] = args.model_name
     final_object["dataset"] = args.dataset
@@ -138,13 +170,30 @@ def test_multiple(datacoll,model,exits,loss_f,notes_path,args):
     
     final_object["test_vals"] = results
     
-    save_path = f"{args.model_name}_{ts}.json"
+    save_path = get_save_path(args.model_name, notes_path, desc="multiple")
+    
     
     with open(save_path, 'a') as output:
         output.write(json.dumps(final_object, indent=2))
 
 
 def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = False):
+    """Run and time an individual test on entire dataset with given test parameters
+
+    Args:
+        datacoll: Dataloader object
+        model : Loader model object
+        exits (_int_) : Number of exits for the given model
+        top1_thr (_type_): Early-exit threshold used for softmax-like confidence functions
+        entr_thr (_type_): Early-exit threshold for entropy-like confidence functions
+        loss_f : Loss function (unused)
+        args : CLI arguments
+        save_raw (bool, optional): If True, final activation layer and softmax vectors are saved in return dict. Defaults to False.
+
+    Returns:
+        _tuple[float, dict]_: Elapsed time and dictionary containing all the test information
+    """
+    
     # Device setup
     if torch.cuda.is_available() and args.gpu_target is not None:
         device = torch.device(f"cuda:{args.gpu_target}")
@@ -180,42 +229,48 @@ def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = Fals
 
     return elapsed_time, net_test.get_stats()
 
-def test(datacoll,model,exits,loss_f,notes_path,args):
+def test_single(datacoll,model,exits,loss_f,notes_path,args):
+    """Run single test on a given model. Save the test results in JSON file
 
+    Args:
+        datacoll: Dataloader object
+        model : Loader model object
+        exits (_int_) : Number of exits for the given model
+        loss_f : Loss function (unused)
+        notes_path : Optional custom path for saving the output of the test
+        args : CLI arguments
+    """    
     
-    save_raw = args.save_raw_softmax 
-    
-    ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
-    save_path = f"{args.model_name}_singleThresh_{ts}.json"
-    
-    if save_raw:
-        print("Storing the raw model results at", save_path)
+    save_raw = args.save_raw
 
     elapsed_time, test_stats = run_test(datacoll,model,exits,args.top1_threshold, args.entr_threshold,loss_f,args,save_raw)
         
     print("top1 thrs: {},  entropy thrs: {}".format(args.top1_threshold, args.entr_threshold))
     print("Total time elapsed:", elapsed_time, "s")
-    
-    # with open(notes_path, 'a') as notes:
-    #     notes.write("\n#######################################\n")
-    #     notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
-    #     notes.write(f"on dataset {args.dataset}\n")
         
-    #     # notes.write("JSON data:\n")
-    #     # pretty = json.dumps(test_stats)
-    #     # notes.write(pretty)
-    #     # notes.write('\n')
+    ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
+    if not save_raw: # when saving raw output, txt file doesn't make sense
+        with open(get_save_path("test", notes_path, filetype='txt'), 'a') as notes:
+            notes.write("\n#######################################\n")
+            notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
+            notes.write(f"on dataset {args.dataset}:\n")
+            
+            notes.write(json.dumps(test_stats, indent=2))
+            notes.write('\n')
 
-    #     if args.run_notes is not None:
-    #         notes.write(args.run_notes+"\n")
-    # notes.close()
+            if args.run_notes is not None:
+                notes.write(args.run_notes+"\n")
+        notes.close()
     
     final_object = {}
     final_object["model"] = args.model_name
+    if hasattr(args,'trained_model_path') and args.trained_model_path is not None:
+        final_object["model_path"] = args.trained_model_path
     final_object["dataset"] = args.dataset
     
     final_object["test_vals"] = test_stats
     
+    save_path = get_save_path(args.model_name, notes_path, desc="single")
     
     with open(save_path, 'a') as output:
         if save_raw:
@@ -223,10 +278,10 @@ def test(datacoll,model,exits,loss_f,notes_path,args):
         else:
             output.write(json.dumps(final_object, indent=2))
 
-"""
-Main training and testing function run from the cli
-"""
 def train_n_test(args):
+    """
+    Main training and testing function run from the cli
+    """
     #set up the model specified in args
     model = get_model(args.model_name)
     # get number of exits
@@ -340,16 +395,9 @@ def train_n_test(args):
     load_model(net_trainer.model, best)
 
     #once trained, run it on the test data
-    # test(datacoll,net_trainer.model,exits,loss_f,notes_path,args)
-    test(datacoll,net_trainer.model,exits,loss_f,best,notes_path,args)
+    test_single(datacoll,net_trainer.model,exits,loss_f,best,notes_path,args)
     return net_trainer.model,best
 
-
-def path_check(string): #checks for valid path
-    if os.path.exists(string):
-        return string
-    else:
-        raise FileNotFoundError(string)
 
 """
 Main function that sorts out the CLI args and runs training and testing function.
@@ -385,7 +433,7 @@ def main():
     parser.add_argument('-rn', '--run_notes', type=str, required=False,
             help='Some notes to add to the train/test information about the model or otherwise')
     
-    parser.add_argument('-np', '--notes_path', type=str, required=False,
+    parser.add_argument('-np', '--notes_path', type=path_check, required=False,
             help='Path to location for notes to be saved')
     parser.add_argument('-cf','--confidence_function',required=False,nargs='+', type=int,
             help='Choose which function to be used when determining the confidence of the network at a given exit, pick one or many')
@@ -417,8 +465,8 @@ def main():
     parser.add_argument('-tr', '--threshold_range', nargs='+', type=float, required=False)
     parser.add_argument('-ts', '--threshold_step', type=float, required=False)
     
-    parser.add_argument('-sr', '--save_raw_softmax', type=bool, default=False, required=False, 
-                        help="Save the value of the softmax outputs")
+    parser.add_argument('-sr', '--save_raw', action=argparse.BooleanOptionalAction, default=False, required=False, 
+                        help='Save the value of the final activation vector and confidence functions')
 
     # generate onnx graph for the model
     parser.add_argument('-go', '--generate_onnx',metavar='PATH',type=path_check,
@@ -431,8 +479,6 @@ def main():
 
     # parse the arguments
     args = parser.parse_args()
-    # breakpoint()
-
     if args.trained_model_path is not None and (args.bb_epochs==0 and args.jt_epochs==0):
         model = test_only(args)
         model_path = args.trained_model_path
