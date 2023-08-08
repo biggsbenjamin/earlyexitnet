@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import mstats
 from sklearn.neighbors import KernelDensity
-
+from sklearn import metrics
 from matplotlib.pyplot import cm
 import math
 
@@ -140,3 +140,84 @@ def make_axes(num_classes: int, **kwargs):
         )
     else:
         return plt.subplots(nrows=sqrt, ncols=sqrt, **kwargs)
+
+
+def plot_false_positives(
+    x,
+    confidence_layer: np.array,
+    correctness: np.array,
+    label_prefix="",
+    normalised=True,
+    ax=None,
+    cax=None,
+):
+    exit_perc = []
+    fp_rate = []
+
+    total_num = len(confidence_layer) if normalised else 1
+    for thr in x:
+        exiting_mask = confidence_layer > thr
+        num_exiting = np.invert(exiting_mask).sum()
+        # keep track of how many samples exited at this thresh level
+        exit_perc.append(num_exiting / total_num)
+
+        # pick out the values that would exit and see how many are wrong
+        fp_num = np.invert(correctness[exiting_mask]).sum()
+        fp_rate.append(fp_num / total_num)
+
+    if ax is not None:
+        line1 = ax.plot(x, exit_perc, label=label_prefix + "E%", ls="dashed")
+        ax.plot(x, fp_rate, label=label_prefix + "FP", color=line1[0].get_color())
+        ax.legend(fontsize="small")
+
+    if cax is not None:
+        cost = np.array(fp_rate) + 0.1 * np.array(exit_perc)
+        cax.plot(
+            x,
+            cost,
+            label=label_prefix + "C",
+            ls="dashdot",
+            color=line1[0].get_color() if ax else None,
+        )
+        cax.legend(fontsize="small")
+
+
+def plot_auroc(
+    ax: plt.Axes,
+    threshes: np.array,
+    vals: np.array,
+    correct: np.array,
+    prefix="",
+    **kwargs,
+):
+    num_false = np.logical_not(correct).sum()
+    num_true = correct.sum()
+    roc = []
+
+    for thr in threshes:
+        estimate = vals > thr
+
+        # correctly identified positive values (both true)
+        num_correct = np.logical_and(estimate, correct).sum()
+        # true positive rate
+        tpr = num_correct / num_true
+
+        # false positive (true in estimate, false in correct)
+        num_false_positive = np.logical_and(estimate, np.logical_not(correct)).sum()
+        # false positive rate
+        fpr = num_false_positive / num_false
+
+        roc.append([thr, tpr, fpr])
+    roc = np.array(roc)
+
+    auroc = metrics.auc(roc[:, 2], roc[:, 1])
+
+    # fpr vs tpr
+    ax.plot(
+        roc[:, 2],
+        roc[:, 1],
+        label=f"{prefix}AUROC:{auroc:0.4f}",
+        **kwargs,
+    )
+    ax.set_xlabel("False Positive Rate")
+    ax.set_ylabel("True Positive Rate")

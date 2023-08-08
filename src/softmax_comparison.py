@@ -52,46 +52,6 @@ def raw_distance_daghero(raw_layer: np.array):
     return dist
 
 
-def plot_false_positives(
-    x,
-    confidence_layer: np.array,
-    correctness: np.array,
-    label_prefix="",
-    normalised=True,
-    ax=None,
-    cax=None,
-):
-    exit_perc = []
-    fp_rate = []
-
-    total_num = len(confidence_layer) if normalised else 1
-    for thr in x:
-        exiting_mask = confidence_layer > thr
-        num_exiting = np.invert(exiting_mask).sum()
-        # keep track of how many samples exited at this thresh level
-        exit_perc.append(num_exiting / total_num)
-
-        # pick out the values that would exit and see how many are wrong
-        fp_num = np.invert(correctness[exiting_mask]).sum()
-        fp_rate.append(fp_num / total_num)
-
-    if ax is not None:
-        line1 = ax.plot(x, exit_perc, label=label_prefix + "E%", ls="dashed")
-        ax.plot(x, fp_rate, label=label_prefix + "FP", color=line1[0].get_color())
-        ax.legend(fontsize="small")
-
-    if cax is not None:
-        cost = np.array(fp_rate) + 0.1 * np.array(exit_perc)
-        cax.plot(
-            x,
-            cost,
-            label=label_prefix + "C",
-            ls="dashdot",
-            color=line1[0].get_color() if ax else None,
-        )
-        cax.legend(fontsize="small")
-
-
 def main(json_file, funcs=None, plot_classes=False):
     # json_file = "./rawSoftmax_b_lenet_se_singleThresh_2023-07-19_153525.json"
     # json_file = "./b_lenet_cifar_singleThresh_2023-07-20_172520.json"
@@ -226,6 +186,8 @@ def main(json_file, funcs=None, plot_classes=False):
     if not plot_classes:
         fig5, fps_ax = plt.subplots(1, 1)
         fps_cost_ax = fps_ax.twinx()
+        fig9, aurax = plt.subplots()
+        fig9.suptitle("AUROC")
 
     print("Running analysis on different confidence functions")
     # ANALISE VARIOUS SOFTMAX FUNCTIONS
@@ -235,9 +197,12 @@ def main(json_file, funcs=None, plot_classes=False):
         if funcs is None or row in funcs:
             sftmx = function["raw_softmax"]
 
+            subt = f"[{title_name}]({name})"
             if not plot_classes:
-                fig, axis = plt.subplots(ncols=2, nrows=num_exits - 1, squeeze=False)
-                fig.suptitle(f"{title_name} {row}:{name}")
+                fig, axis = plt.subplots(
+                    ncols=2, nrows=num_exits - 1, squeeze=False, layout="constrained"
+                )
+                fig.suptitle(f"{subt}")
                 fig.set_size_inches(14, 6)
 
             # don't perform this analysis on the last exit as there is no decision to be made
@@ -259,10 +224,9 @@ def main(json_file, funcs=None, plot_classes=False):
                     fig1, axs = make_axes(num_classes, layout="constrained")
                     fig2, axs = make_axes(num_classes, layout="constrained")
                     fig3, ax3 = plt.subplots()
-                    subt = f"[{title_name}]({name} Exit {exit_num})"
-                    fig1.suptitle(f"{subt} Distribution")
-                    fig2.suptitle(f"{subt} Cost")
-                    fig3.suptitle(f"{subt} Combined")
+                    fig1.suptitle(f"{subt} Exit {exit_num} Distribution")
+                    fig2.suptitle(f"{subt} Exit {exit_num} Cost")
+                    fig3.suptitle(f"{subt} Exit {exit_num} Combined")
                     sft_grouped = group_by_1D(
                         np.stack(
                             (
@@ -308,6 +272,14 @@ def main(json_file, funcs=None, plot_classes=False):
                         fig2.axes[i].set_title(f"{i}")
 
                 else:
+                    plot_auroc(
+                        aurax,
+                        np.linspace(0, 1, 200),
+                        softmax,
+                        correctness[exit_num],
+                        prefix=f"{name} ",
+                    )
+                    aurax.legend()
                     ax = axis[exit_num][0]
                     plot_right_wrong(ax, softmax, correctness[exit_num], logbins)
                     plot_difficulties(
@@ -329,8 +301,8 @@ def main(json_file, funcs=None, plot_classes=False):
                     ]
                     plot_false_positives(
                         logbins,
-                        softmax[correctness[exit_num + 1]],
-                        relative_correctness,
+                        softmax,
+                        correctness[exit_num],
                         ax=fp_ax,
                         normalised=True,
                         cax=fp_cost_ax,
@@ -338,8 +310,8 @@ def main(json_file, funcs=None, plot_classes=False):
 
                     plot_false_positives(
                         logbins,
-                        softmax[correctness[exit_num + 1]],
-                        relative_correctness,
+                        softmax,
+                        correctness[exit_num],
                         ax=fps_ax,
                         label_prefix=name + " ",
                         cax=fps_cost_ax,
@@ -375,6 +347,7 @@ if __name__ == "__main__":
         "--per_class",
         required=False,
         default=False,
+        action=argparse.BooleanOptionalAction,
         help="Run the analysis on a per class basis. Warning, will produce many graphs",
     )
 
