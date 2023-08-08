@@ -53,12 +53,12 @@ def raw_distance_daghero(raw_layer: np.array):
 
 
 def plot_false_positives(
-    ax,
     x,
     confidence_layer: np.array,
     correctness: np.array,
     label_prefix="",
     normalised=True,
+    ax=None,
     cax=None,
 ):
     exit_perc = []
@@ -75,23 +75,24 @@ def plot_false_positives(
         fp_num = np.invert(correctness[exiting_mask]).sum()
         fp_rate.append(fp_num / total_num)
 
-    line1 = ax.plot(x, exit_perc, label=label_prefix + "E%", ls="dashed")
-    ax.plot(x, fp_rate, label=label_prefix + "FP", color=line1[0].get_color())
-    ax.legend(fontsize="small")
+    if ax is not None:
+        line1 = ax.plot(x, exit_perc, label=label_prefix + "E%", ls="dashed")
+        ax.plot(x, fp_rate, label=label_prefix + "FP", color=line1[0].get_color())
+        ax.legend(fontsize="small")
 
-    if cax:
+    if cax is not None:
         cost = np.array(fp_rate) + 0.1 * np.array(exit_perc)
         cax.plot(
             x,
             cost,
             label=label_prefix + "C",
             ls="dashdot",
-            color=line1[0].get_color(),
+            color=line1[0].get_color() if ax else None,
         )
         cax.legend(fontsize="small")
 
 
-def main(json_file, funcs=None):
+def main(json_file, funcs=None, plot_classes=False):
     # json_file = "./rawSoftmax_b_lenet_se_singleThresh_2023-07-19_153525.json"
     # json_file = "./b_lenet_cifar_singleThresh_2023-07-20_172520.json"
 
@@ -112,14 +113,10 @@ def main(json_file, funcs=None):
 
     # if softmax_values is not None:
     doctor = DOCTOR_softmax_from_softmax(np.array(softmax_values))
-    data["test_vals"]["comps"].append(
-        {"name": "doctor sfmtx", "raw_softmax": doctor}
-    )
+    data["test_vals"]["comps"].append({"name": "doctor sfmtx", "raw_softmax": doctor})
 
     doctor = DOCTOR_softmax_from_raw(np.array(raw_layer))
-    data["test_vals"]["comps"].append(
-        {"name": "doctor raw", "raw_softmax": doctor}
-    )
+    data["test_vals"]["comps"].append({"name": "doctor raw", "raw_softmax": doctor})
 
     # custom_func = raw_distance(np.array(raw_layer))
     # data['test_vals']['comps'].append({
@@ -133,7 +130,7 @@ def main(json_file, funcs=None):
     )
 
     num_exits = data["test_vals"]["num_exits"]
-
+    num_classes = np.array(raw_layer).shape[-1]
     num_compares = len(data["test_vals"]["comps"])
 
     correct_col = "blue"
@@ -154,9 +151,7 @@ def main(json_file, funcs=None):
     for i, exit_layer in enumerate(correctness):
         weight = 2 ** (num_exits - i - 1)
         exit_layer = exit_layer * weight
-        difficulty = (
-            exit_layer if difficulty is None else difficulty + exit_layer
-        )
+        difficulty = exit_layer if difficulty is None else difficulty + exit_layer
 
     difficulties = [0, 1]  # only misclassifications in the first exit
 
@@ -228,8 +223,9 @@ def main(json_file, funcs=None):
         ax.set_title(f"exit {e}")
         ax.legend(loc="upper left")
 
-    fig5, fps_ax = plt.subplots(1, 1)
-    fps_cost_ax = fps_ax.twinx()
+    if not plot_classes:
+        fig5, fps_ax = plt.subplots(1, 1)
+        fps_cost_ax = fps_ax.twinx()
 
     print("Running analysis on different confidence functions")
     # ANALISE VARIOUS SOFTMAX FUNCTIONS
@@ -239,21 +235,17 @@ def main(json_file, funcs=None):
         if funcs is None or row in funcs:
             sftmx = function["raw_softmax"]
 
-            fig, axis = plt.subplots(
-                ncols=2, nrows=num_exits - 1, squeeze=False
-            )
+            if not plot_classes:
+                fig, axis = plt.subplots(ncols=2, nrows=num_exits - 1, squeeze=False)
+                fig.suptitle(f"{title_name} {row}:{name}")
+                fig.set_size_inches(14, 6)
 
-            fig.suptitle(f"{title_name} {row}:{name}")
-
+            # don't perform this analysis on the last exit as there is no decision to be made
             for exit_num, softmax in enumerate(sftmx[:-1]):
-                ax = axis[exit_num][0]
                 softmax = np.array(softmax)
-                # separate the maximum values for the correct and incorrect
-
                 logbins = np.linspace(0, 1, 100)
-
                 if name == "Entropy":
-                    softmax = (1 / np.log(10)) * softmax
+                    softmax = (1 / np.log(num_classes)) * softmax
                     softmax = 1 - softmax
                 elif "doctor" in name:
                     softmax = softmax
@@ -263,46 +255,99 @@ def main(json_file, funcs=None):
                 else:
                     softmax = np.max(softmax, -1)
 
-                plot_right_wrong(ax, softmax, correctness[exit_num], logbins)
+                if plot_classes:
+                    fig1, axs = make_axes(num_classes, layout="constrained")
+                    fig2, axs = make_axes(num_classes, layout="constrained")
+                    fig3, ax3 = plt.subplots()
+                    subt = f"[{title_name}]({name} Exit {exit_num})"
+                    fig1.suptitle(f"{subt} Distribution")
+                    fig2.suptitle(f"{subt} Cost")
+                    fig3.suptitle(f"{subt} Combined")
+                    sft_grouped = group_by_1D(
+                        np.stack(
+                            (
+                                # consider only those values which are correctly classified by last layer
+                                np.array(raw_layer[exit_num])[correctness[-1]].argmax(
+                                    -1
+                                ),
+                                softmax[correctness[-1]],
+                                correctness[exit_num][correctness[-1]],
+                            ),
+                            -1,
+                        )
+                    )
 
-                plot_difficulties(
-                    ax,
-                    difficulty,
-                    softmax,
-                    logbins,
-                    density=True,
-                    difficulties=difficulties,
-                )
+                    for i, cl in enumerate(sft_grouped):
+                        plot_right_wrong(
+                            fig1.axes[i],
+                            cl[:, 0],
+                            np.array(cl[:, 1], dtype=bool),
+                            logbins,
+                        )
 
-                # axis for false positive plotting
-                fp_ax = axis[exit_num][1]
-                fp_cost_ax = fp_ax.twinx()
-                # keep only those values that are correct at the next exit
-                # could be changed to keep only values that are correct at the final exit
-                relative_correctness = correctness[exit_num][
-                    correctness[exit_num + 1]
-                ]
-                plot_false_positives(
-                    fp_ax,
-                    logbins,
-                    softmax[correctness[exit_num + 1]],
-                    relative_correctness,
-                    normalised=True,
-                    cax=fp_cost_ax,
-                )
-                plot_false_positives(
-                    fps_ax,
-                    logbins,
-                    softmax[correctness[exit_num + 1]],
-                    relative_correctness,
-                    label_prefix=name + " ",
-                    cax=fps_cost_ax,
-                )
+                        # plot per class separately
+                        plot_false_positives(
+                            logbins,
+                            cl[:, 0],
+                            np.array(cl[:, 1], dtype=bool),
+                            ax=fig2.axes[i],
+                            normalised=True,
+                            cax=fig2.axes[i].twinx(),
+                        )
+                        # combine all per class ones
+                        plot_false_positives(
+                            logbins,
+                            cl[:, 0],
+                            np.array(cl[:, 1], dtype=bool),
+                            normalised=True,
+                            cax=ax3,
+                            label_prefix=f"{i}",
+                        )
 
-                ax.set_title(f"exit {exit_num}")
-                ax.legend()
+                        fig1.axes[i].set_title(f"{i}")
+                        fig2.axes[i].set_title(f"{i}")
 
-            fig.set_size_inches(14, 6)
+                else:
+                    ax = axis[exit_num][0]
+                    plot_right_wrong(ax, softmax, correctness[exit_num], logbins)
+                    plot_difficulties(
+                        ax,
+                        difficulty,
+                        softmax,
+                        logbins,
+                        density=True,
+                        difficulties=difficulties,
+                    )
+
+                    # axis for false positive plotting
+                    fp_ax = axis[exit_num][1]
+                    fp_cost_ax = fp_ax.twinx()
+                    # keep only those values that are correct at the next exit
+                    # could be changed to keep only values that are correct at the final exit
+                    relative_correctness = correctness[exit_num][
+                        correctness[exit_num + 1]
+                    ]
+                    plot_false_positives(
+                        logbins,
+                        softmax[correctness[exit_num + 1]],
+                        relative_correctness,
+                        ax=fp_ax,
+                        normalised=True,
+                        cax=fp_cost_ax,
+                    )
+
+                    plot_false_positives(
+                        logbins,
+                        softmax[correctness[exit_num + 1]],
+                        relative_correctness,
+                        ax=fps_ax,
+                        label_prefix=name + " ",
+                        cax=fps_cost_ax,
+                    )
+
+                    ax.set_title(f"exit {exit_num}")
+                    ax.legend()
+    # plt.tight_layout()
     plt.show()
 
 
@@ -325,7 +370,15 @@ if __name__ == "__main__":
         help="Index into the functions to be used in analysis",
     )
 
+    parser.add_argument(
+        "-cl",
+        "--per_class",
+        required=False,
+        default=False,
+        help="Run the analysis on a per class basis. Warning, will produce many graphs",
+    )
+
     args = parser.parse_args()
 
     print(f"Analysis on: {args.filename}")
-    main(args.filename, funcs=args.functions)
+    main(args.filename, funcs=args.functions, plot_classes=args.per_class)
