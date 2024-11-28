@@ -26,7 +26,6 @@ from time import perf_counter
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-
 class Comparison:
     def __init__(
         self,
@@ -258,6 +257,7 @@ class Tester:
         self.top1_accu_tot = None  # total accuracy of network given exit strat
         self.entr_accu_tot = None  # total accuracy of network given exit strat
 
+    #### FIXME bb version do not delete ####
     def _thr_max_softmax(self, exit_results, thr):
         ### NOTE DEFINING TOP1 of SOFTMAX DECISION
         sftmax = nn.functional.softmax(exit_results, dim=-1)
@@ -274,20 +274,21 @@ class Tester:
         exit_mask = entr.lt(thr)
         return exit_mask
 
-    def _thr_compare_(self, exit_track, accu_track, results, gnd_trth, thrs, thr_func):
+    def _thr_compare_(self, exit_track, accu_track,
+            results, gnd_trth, thrs, thr_func):
         # generate all false mask
-        prev_mask = torch.tensor(
-            [False] * self.batch_size, dtype=torch.bool, device=self.device
+        prev_mask = torch.tensor([False] * self.batch_size,
+                dtype=torch.bool, device=self.device
         )
-        for i, (exit, thr) in enumerate(zip(results, thrs)):
+        for i,(exit,thr) in enumerate(zip(results,thrs)):
             # call function to generate mask
-            exit_mask = thr_func(exit, thr)
+            exit_mask = thr_func(exit,thr)
             # mask out values that previously exited
             exit_mask = exit_mask.logical_and(prev_mask.logical_not())
             # get number that are exiting here
             exit_num = exit_mask.sum()
             # updated the number exiting
-            exit_track.add_val(exit_num, bin_index=i)
+            exit_track.add_val(exit_num,bin_index=i)
             # update accuracy, along with number exiting here
             accu_track.update_correct(
                 exit[exit_mask],
@@ -297,7 +298,9 @@ class Tester:
             )
             # update exit mask
             prev_mask = exit_mask
+    #### FIXME bb version do not delete ####
 
+    #### lr versions of comparison stuff
     def _entropy_comparison(
         self, layer: torch.Tensor, thresh: float, test=False
     ) -> bool:
@@ -376,11 +379,12 @@ class Tester:
             ) as pbar:
                 for xb, yb in self.test_dl:
                     xb, yb = xb.to(self.device), yb.to(self.device)
-                    res = self.model(
-                        xb
-                    )  # implicitly calls forward and returns array of arrays of the final layer for each exit (techically list of tensors for each exit)
+                    res = self.model(xb)
+                    # implicitly calls forward and returns array of arrays of the
+                    # final layer for each exit (techically list of tensors for each exit)
                     # res has dimension [num_exits, batch_size, num_classes]
 
+                    #### FIXME bb version - work out what is done differently, is it faster
                     # # accuracy of exits over everything
                     # self.accu_track_totl.update_correct(res,yb)
                     # # maximum value of softmax (top1) GREATER than thr
@@ -415,33 +419,34 @@ class Tester:
                         for comp in self.comparators:
                             comp.eval(res, yb)
 
+                    # I think this is part of the profiling
                     pbar.update(self.test_dl.batch_size)
 
     def _test_single_exit(self):
         self.model.eval()
         self.model.to(self.device)
         with torch.no_grad():
-            for xb, yb in self.test_dl:
-                xb, yb = xb.to(self.device), yb.to(self.device)
+            for xb,yb in self.test_dl:
+                xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
-                self.accu_track_totl.update_correct(res, yb)
+                self.accu_track_totl.update_correct(res,yb)
 
     def debug_values(self):
         self.model.eval()
         self.model.to(self.device)
         with torch.no_grad():
-            for xb, yb in self.test_dl:
-                xb, yb = xb.to(self.device), yb.to(self.device)
+            for xb,yb in self.test_dl:
+                xb,yb = xb.to(self.device),yb.to(self.device)
                 res = self.model(xb)
-                for i, exit in enumerate(res):
-                    # print("raw exit {}: {}".format(i, exit))
-                    softmax = nn.functional.softmax(exit, dim=-1)
-                    # print("softmax exit {}: {}".format(i, softmax))
+                for i,exit in enumerate(res):
+                    #print("raw exit {}: {}".format(i, exit))
+                    softmax = nn.functional.softmax(exit,dim=-1)
+                    #print("softmax exit {}: {}".format(i, softmax))
                     sftmx_max = torch.max(softmax)
                     print("exit {} max softmax: {}".format(i, sftmx_max))
                     entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)))
                     print("exit {} entropy: {}".format(i, entr))
-                    # print("exit CE loss: {}".format(loss_f(exit,yb)))
+                    #print("exit CE loss: {}".format(loss_f(exit,yb)))
 
     def get_stats(self):
         return_val = {}
@@ -474,6 +479,15 @@ class Tester:
         print(f"Test of length {self.sample_total} starting")
         if self.exits > 1:
             self._test_multi_exit()
+            #### FIXME bb version of stat gathering
+            #self.top1_pc = self.exit_track_top1.get_avg(return_list=True)
+            #self.entr_pc = self.exit_track_entr.get_avg(return_list=True)
+            #self.top1_accu = self.accu_track_top1.get_accu(return_list=True)
+            #self.entr_accu = self.accu_track_entr.get_accu(return_list=True)
+            #self.top1_accu_tot = np.sum(self.accu_track_top1.val_bins)/(self.sample_total*self.batch_size)
+            #self.entr_accu_tot = np.sum(self.accu_track_entr.val_bins)/(self.sample_total*self.batch_size)
+            #### FIXME bb version of res printing
+
             print("### TEST FINISHED ###")
 
             if self.comp_funcs is not None:

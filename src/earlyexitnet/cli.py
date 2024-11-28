@@ -54,9 +54,9 @@ def get_save_path(model_name, notes_path, timestamp=True, desc=None, show=True, 
     if timestamp:
         ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
         save_path += f"_{ts}"
-    
+
     save_path += f'.{filetype}'
-    
+
     save_path = os.path.join(notes_path,save_path)
     if show:
         print("Storing the test results at", save_path)
@@ -84,19 +84,19 @@ def test_only(args):
     batch_size_test = args.batch_size_test #test bs in branchynet
     print("Setting up for testing")
     #load in the model from the path
-    
+
     # Device setup
     if torch.cuda.is_available() and args.gpu_target is not None:
         device = torch.device(f"cuda:{args.gpu_target}")
     else:
         device = torch.device("cpu")
     print("Device:", device)
-    
+
     load_model(model, args.trained_model_path, device=device)
-    
+
     num_workers = 1 if args.num_workers is None else args.num_workers
     print(f"Number of workers: {num_workers}")
-    
+
     # check if there are thresholds provided
     if args.top1_threshold is None and \
             args.entr_threshold is None and \
@@ -119,8 +119,8 @@ def test_only(args):
         notes_path = os.path.join(os.path.split(args.trained_model_path)[0],'jsons')
         if not os.path.exists(notes_path):
             os.makedirs(notes_path)
-        
-        
+
+
     if args.threshold_range is not None and args.threshold_step is not None:
         if len(args.threshold_range) == 2:
             test_multiple(datacoll,model,exits,loss_f,notes_path,args)
@@ -131,9 +131,9 @@ def test_only(args):
         test_single(datacoll,model,exits,loss_f,notes_path,args)
 
 def test_multiple(datacoll,model,exits,loss_f,notes_path,args):
-    """Run multiples tests on a given model, varying the ealy-exit threshold linearly in a given range, 
+    """Run multiples tests on a given model, varying the ealy-exit threshold linearly in a given range,
     with a given step. Save the test results in JSON file
-    
+
     Args:
         datacoll: Dataloader object
         model : Loader model object
@@ -144,22 +144,22 @@ def test_multiple(datacoll,model,exits,loss_f,notes_path,args):
     """
     step = args.threshold_step
     min_thr, max_thr = args.threshold_range
-    
-    num_tests = int((max_thr - min_thr)/step)  
+
+    num_tests = int((max_thr - min_thr)/step)
     total_time = 0
     running_time = 0
-    
+
     results = []
-    
+
     for i, thresh in enumerate(np.arange(min_thr, max_thr, step)):
         rt_string = dt.utcfromtimestamp(timedelta(seconds=int(running_time)).total_seconds()).strftime("%M:%S")
         tt_string = dt.utcfromtimestamp(timedelta(seconds=total_time).total_seconds()).strftime("%M:%S")
         print(f"\nRunning test {i}/{num_tests}, thresh: {thresh} \t\t [{rt_string}/{tt_string}]")
-        
+
         elapsed_time, test_stats = run_test(datacoll,model,exits,[float(thresh)], None,loss_f,args) # ignore entropy threshold
 
         results.append(test_stats)
-        
+
         running_time += elapsed_time
         total_time = int((float(running_time) / (i+1)) * num_tests)
 
@@ -167,12 +167,12 @@ def test_multiple(datacoll,model,exits,loss_f,notes_path,args):
     final_object["model"] = args.model_name
     final_object["dataset"] = args.dataset
     final_object["thresholds"] = {"min_thr":min_thr, "max_thr":max_thr, "step":step}
-    
+
     final_object["test_vals"] = results
-    
+
     save_path = get_save_path(args.model_name, notes_path, desc="multiple")
-    
-    
+
+
     with open(save_path, 'a') as output:
         output.write(json.dumps(final_object, indent=2))
 
@@ -193,7 +193,7 @@ def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = Fals
     Returns:
         _tuple[float, dict]_: Elapsed time and dictionary containing all the test information
     """
-    
+
     # Device setup
     if torch.cuda.is_available() and args.gpu_target is not None:
         device = torch.device(f"cuda:{args.gpu_target}")
@@ -239,39 +239,39 @@ def test_single(datacoll,model,exits,loss_f,notes_path,args):
         loss_f : Loss function (unused)
         notes_path : Optional custom path for saving the output of the test
         args : CLI arguments
-    """    
-    
+    """
+
     save_raw = args.save_raw
 
     elapsed_time, test_stats = run_test(datacoll,model,exits,args.top1_threshold, args.entr_threshold,loss_f,args,save_raw)
-        
+
     print("top1 thrs: {},  entropy thrs: {}".format(args.top1_threshold, args.entr_threshold))
     print("Total time elapsed:", elapsed_time, "s")
-        
+
     ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
     if not save_raw: # when saving raw output, txt file doesn't make sense
         with open(get_save_path("test", notes_path, filetype='txt', timestamp=False), 'a') as notes:
             notes.write("\n#######################################\n")
             notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
             notes.write(f"on dataset {args.dataset}:\n")
-            
+
             notes.write(json.dumps(test_stats, indent=2))
             notes.write('\n')
 
             if args.run_notes is not None:
                 notes.write(args.run_notes+"\n")
         notes.close()
-    
+
     final_object = {}
     final_object["model"] = args.model_name
     if hasattr(args,'trained_model_path') and args.trained_model_path is not None:
         final_object["model_path"] = args.trained_model_path
     final_object["dataset"] = args.dataset
-    
+
     final_object["test_vals"] = test_stats
-    
+
     save_path = get_save_path(args.model_name, notes_path, desc="single")
-    
+
     with open(save_path, 'a') as output:
         if save_raw:
             output.write(json.dumps(final_object))
@@ -399,10 +399,13 @@ def train_n_test(args):
     return net_trainer.model,best
 
 
-"""
-Main function that sorts out the CLI args and runs training and testing function.
-"""
 def main():
+    """
+    Main function that sorts out the CLI args and runs training and testing function.
+    """
+
+    # this formatter prevents the help text description automatically wrapping to fit in terminal
+    # requires the help text to have manual line breaks
     parser = argparse.ArgumentParser(description="Early Exit CLI", formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument('-m','--model_name',
@@ -432,7 +435,7 @@ def main():
     # run notes
     parser.add_argument('-rn', '--run_notes', type=str, required=False,
             help='Some notes to add to the train/test information about the model or otherwise')
-    
+
     parser.add_argument('-np', '--notes_path', type=path_check, required=False,
             help='Path to location for notes to be saved')
     parser.add_argument('-cf','--confidence_function',required=False,nargs='+', type=int,
@@ -461,11 +464,11 @@ def main():
     #threshold inputs for testing, 1 or more args - user should know model
     parser.add_argument('-t1','--top1_threshold', nargs='+',type=float,required=False)
     parser.add_argument('-entr','--entr_threshold', nargs='+',type=float,required=False)
-    
+
     parser.add_argument('-tr', '--threshold_range', nargs='+', type=float, required=False)
     parser.add_argument('-ts', '--threshold_step', type=float, required=False)
-    
-    parser.add_argument('-sr', '--save_raw', action=argparse.BooleanOptionalAction, default=False, required=False, 
+
+    parser.add_argument('-sr', '--save_raw', action=argparse.BooleanOptionalAction, default=False, required=False,
                         help='Save the value of the final activation vector and confidence functions')
 
     # generate onnx graph for the model

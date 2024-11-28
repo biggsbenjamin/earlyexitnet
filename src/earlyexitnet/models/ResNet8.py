@@ -319,18 +319,24 @@ class ResNet8_2EE(ResNet8_backbone):
     def _forward_training(self, x):
         # TODO make jit compatible - not urgent
         # NOTE broken because returning list()
+
+        ### NOTE previous version used lists, new version might not keep all exits? might be more efficient?
+        # res = []
         y = self.init_conv(x)
-        
+        #res.append(self.exits[0](y))
+
         early_exit = self.exits[0](y)
         # compute remaining backbone layers
         for b in self.backbone:
             y = b(y)
         # final exit
+        #y = self.end_layers(y)
         final_exit = self.end_layers(y)
-        
+
+        #res.append(y)
         res = torch.stack((early_exit, final_exit), dim=0)
         return res
-    
+
     def exit_criterion_top1(self, x): #NOT for batch size > 1
         with torch.no_grad():
             pk = nn.functional.softmax(x, dim=-1)
