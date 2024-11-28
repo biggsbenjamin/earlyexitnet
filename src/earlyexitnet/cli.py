@@ -14,7 +14,7 @@ from earlyexitnet.testing_tools.test import Tester
 
 # import dataloaders from tools
 from earlyexitnet.tools import \
-    MNISTDataColl,CIFAR10DataColl,load_model,path_check
+    MNISTDataColl,CIFAR10DataColl,load_model,path_check,save_model
 
 from earlyexitnet.onnx_tools.onnx_helpers import \
     to_onnx
@@ -34,7 +34,8 @@ def get_exits(model_str):
                      'brnsecond','brnfirst_se','backbone_se']:
         exits = 1
     elif model_str in ['b_lenet','b_lenet_fcn',
-                       'b_lenet_se','b_lenet_cifar']:
+                       'b_lenet_se','b_lenet_cifar',
+                       'b_lenet_imagenet']:
         exits = 2
     else:
         raise NameError("Model not supported, check name:",args.model_name)
@@ -273,6 +274,20 @@ def train_n_test(args):
     return net_trainer.model,best
 
 """
+Adding function that just builds a new version of the specified model.
+This will be primarily for debug and onnx/fpga toolflow testing.
+"""
+def build_model_only(args):
+    print("WARNING: Building Model ONLY")
+    model = get_model(args.model_name)
+    print("Model:", args.model_name)
+    # need to save model to have a path
+    model_path=save_model(model,
+                f'outputs/build-model-only/{args.model_name}',
+                'build-model-only')
+    return model,model_path
+
+"""
 Main function that sorts out the CLI args and runs training and testing function.
 """
 def main():
@@ -310,11 +325,11 @@ def main():
     #    help='Seed for training, NOT CURRENTLY USED')
 
     parser.add_argument('-d','--dataset',
-            choices=['mnist','cifar10','cifar100'],
+            choices=['mnist','cifar10','cifar100','tinyimagenet','imagenet','s128','s96','s64','s48','s40','t96','t72'],
             required=False, default='mnist',
             help='select the dataset, default is mnist')
     parser.add_argument('--no_scaling',action='store_true',
-                        help='Prevents datqa being scaled to between 0,1')
+                        help='Prevents data being scaled to between 0,1')
 
     # choose the cuda device to target
     parser.add_argument('-gpu','--gpu_target',type=int,required=False,
@@ -334,6 +349,9 @@ def main():
                         required=False,
                         help='Generate onnx from loaded or trained Pytorch model, specify the directory of the output onnx')
 
+    # NOTE flag for model only (used with onnx gen)
+    parser.add_argument('-bm','--build_model', nargs='?', default=False, const=True)
+
     #TODO arguments to add
         #training loss function
         #some kind of testing specification
@@ -341,11 +359,21 @@ def main():
     # parse the arguments
     args = parser.parse_args()
 
-    if args.trained_model_path is not None and args.bb_epochs==0 and args.jt_epochs==0:
-        model = test_only(args)
-        model_path = args.trained_model_path
+    if args.build_model:
+        model,model_path = build_model_only(args)
     else:
-        model,model_path = train_n_test(args)
+        if args.trained_model_path is not None and args.bb_epochs==0 and args.jt_epochs==0:
+            model = test_only(args)
+            model_path = args.trained_model_path
+        else:
+            model,model_path = train_n_test(args)
+
+    # TODO determine this a better way
+    # build model and save
+    # build model and test
+    # build model, train, and test
+    # load model, and test
+    # load model, train, and test
 
     if args.generate_onnx is not None:
         # get input shape for graph gen
@@ -353,6 +381,24 @@ def main():
             shape = [1,28,28]
         elif args.dataset in ['cifar10','cifar100']:
             shape = [3,32,32]
+        elif args.dataset in ['tinyimagenet']:
+            shape = [3,64,64]
+        elif args.dataset in ['imagenet']:
+            shape = [3,224,224]
+        elif args.dataset in ['s128']:
+            shape = [1,128,128]
+        elif args.dataset in ['s96']:
+            shape = [1,96,96]
+        elif args.dataset in ['s64']:
+            shape = [1,64,64]
+        elif args.dataset in ['s48']:
+            shape = [3,48,48]
+        elif args.dataset in ['s40']:
+            shape = [3,40,40]
+        elif args.dataset in ['t96']:
+            shape = [3,96,96]
+        elif args.dataset in ['t72']:
+            shape = [3,72,72]
         else:
             raise NameError("Unknown input shape for model.")
         # generate model name

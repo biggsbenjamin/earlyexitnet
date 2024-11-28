@@ -8,7 +8,14 @@ Added non-ee training from other script for testing purposes.
 
 # importing early exit models
 from earlyexitnet.models.Branchynet import \
-    ConvPoolAc,B_Lenet,B_Lenet_fcn,B_Lenet_se, B_Lenet_cifar
+    ConvPoolAc,B_Lenet,B_Lenet_fcn,B_Lenet_se, B_Lenet_cifar, \
+    B_Lenet_imgnet,B_Lenet_t_imgnet, \
+    B_Lenet_s128,B_Lenet_s96,B_Lenet_s64,B_Lenet_s64_se,B_Lenet_s64_og, \
+    B_Lenet_s64_ll,B_Lenet_cifar10_ll,B_Lenet_s48_ll,B_Lenet_s40_ll, \
+    B_Lenet_t96_ll,B_Lenet_t72_ll,B_Lenet_t_imgnet_ll,B_Lenet_t_imgnet_ll02, \
+    B_Lenet_t_imgnet_ll03,B_Lenet_t_imgnet_ll04,B_Lenet_t_imgnet_ll04_pad, \
+    B_Lenet_t_imgnet_ll05,B_Lenet_t_imgnet_ll06,B_Lenet_t_imgnet_ll07, \
+    B_Lenet_t_imgnet_ll08,B_Lenet_t_imgnet_ll09
 
 # importing non EE models
 # NOTE models that don't output a list (over exits) won't work
@@ -70,6 +77,52 @@ def get_model(model_str):
     elif model_str == 'b_lenet_cifar':
         model = B_Lenet_cifar()
         #print(shape_test(model, [3,32,32], [1])) #output is not one hot encoded
+    elif model_str == 'b_lenet_imagenet':
+        model = B_Lenet_imgnet()
+    elif model_str == 'b_lenet_t_imagenet':
+        model = B_Lenet_t_imgnet()
+    elif model_str == 'b_lenet_s128':
+        model = B_Lenet_s128()
+    elif model_str == 'b_lenet_s96':
+        model = B_Lenet_s96()
+    elif model_str == 'b_lenet_s64':
+        model = B_Lenet_s64()
+    elif model_str == 'b_lenet_s64_se':
+        model = B_Lenet_s64_se()
+    elif model_str == 'b_lenet_s64_og':
+        model = B_Lenet_s64_og()
+    elif model_str == 'b_lenet_s64_ll':
+        model = B_Lenet_s64_ll()
+    elif model_str == 'b_lenet_cifar10_ll':
+        model = B_Lenet_cifar10_ll()
+    elif model_str == 'b_lenet_s48_ll':
+        model = B_Lenet_s48_ll()
+    elif model_str == 'b_lenet_s40_ll':
+        model = B_Lenet_s40_ll()
+    elif model_str == 'b_lenet_t96_ll':
+        model = B_Lenet_t96_ll()
+    elif model_str == 'b_lenet_t72_ll':
+        model = B_Lenet_t72_ll()
+    elif model_str == 'b_lenet_t_imagenet_ll':
+        model = B_Lenet_t_imgnet_ll()
+    elif model_str == 'b_lenet_t_imagenet_ll02':
+        model = B_Lenet_t_imgnet_ll02()
+    elif model_str == 'b_lenet_t_imagenet_ll03':
+        model = B_Lenet_t_imgnet_ll03()
+    elif model_str == 'b_lenet_t_imagenet_ll04':
+        model = B_Lenet_t_imgnet_ll04()
+    elif model_str == 'b_lenet_t_imagenet_ll04_pad':
+        model = B_Lenet_t_imgnet_ll04_pad()
+    elif model_str == 'b_lenet_t_imagenet_ll05':
+        model = B_Lenet_t_imgnet_ll05()
+    elif model_str == 'b_lenet_t_imagenet_ll06':
+        model = B_Lenet_t_imgnet_ll06()
+    elif model_str == 'b_lenet_t_imagenet_ll07':
+        model = B_Lenet_t_imgnet_ll07()
+    elif model_str == 'b_lenet_t_imagenet_ll08':
+        model = B_Lenet_t_imgnet_ll08()
+    elif model_str == 'b_lenet_t_imagenet_ll09':
+        model = B_Lenet_t_imgnet_ll09()
     elif model_str == 'resnet8':
         model = ResNet8()
     elif model_str == 'resnet8_bb':

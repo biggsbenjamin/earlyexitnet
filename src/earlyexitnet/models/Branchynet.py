@@ -280,6 +280,755 @@ class B_Lenet_cifar(B_Lenet_fcn):
         remaining_backbone_layers = nn.Sequential(*bb_layers)
         self.backbone.append(remaining_backbone_layers)
 
+#Simplified exit version:
+#stacks on _fcn changes, removes the conv
+class B_Lenet_imgnet(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(13520, 84))#, bias=False))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(30250,10), #, bias=False),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+#Simplified exit version:
+#stacks on _fcn changes, removes the conv
+class B_Lenet_t_imgnet(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2250,10)
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_s128(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(3920, 84))#, bias=False))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(9610,10), #, bias=False),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_s96(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        # extra linear layer
+        bb_layers.append(nn.Linear(2000, 720))
+        bb_layers.append(nn.Linear(720, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            # extra linear layer
+            nn.Linear(5290,128),
+            nn.Linear(128,10),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_s64(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        # extra linear layer
+        bb_layers.append(nn.Linear(720, 128))
+        bb_layers.append(nn.Linear(128, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2250,10),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_s64_se(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2250,10),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(720,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_s64_og(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2250,10),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_s64_ll(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(1, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 360))
+        bb_layers.append(nn.Linear(360, 128))
+        bb_layers.append(nn.Linear(128, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2250,10),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_cifar10_ll(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(80, 360))
+        bb_layers.append(nn.Linear(360, 128))
+        bb_layers.append(nn.Linear(128, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(490,10),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_s48_ll(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(320, 240))
+        bb_layers.append(nn.Linear(240, 128))
+        bb_layers.append(nn.Linear(128, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(1210,10),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_s40_ll(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(180, 240))
+        bb_layers.append(nn.Linear(240, 128))
+        bb_layers.append(nn.Linear(128, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(810,10),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t96_ll(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(2000, 720))
+        bb_layers.append(nn.Linear(720, 360))
+        bb_layers.append(nn.Linear(360, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(5290,10)
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t72_ll(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(980, 490))
+        bb_layers.append(nn.Linear(490, 240))
+        bb_layers.append(nn.Linear(240, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2890,10)
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 360))#, bias=False))
+        bb_layers.append(nn.Linear(360, 180))#, bias=False))
+        bb_layers.append(nn.Linear(180, 84))#, bias=False))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2250,10), #, bias=False),
+            )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll02(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 180))#, bias=False))
+        bb_layers.append(nn.Linear(180, 100))#, bias=False))
+        bb_layers.append(nn.Linear(100, 50))#, bias=False))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2250,84),
+            nn.Linear(84,10),
+        )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(50,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll03(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 100))
+        bb_layers.append(nn.Linear(100, 50))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2250,10)
+        )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(50,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll04(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=1) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(720, 128))
+        bb_layers.append(nn.Linear(128, 65))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2250,10)
+        )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(65,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll04_pad(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=2)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=2) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=1) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(980, 128))
+        bb_layers.append(nn.Linear(128, 65))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=1),
+            nn.Flatten(),
+            nn.Linear(2560,10)
+        )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(65,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll05(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=0) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=0) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(320, 128))
+        bb_layers.append(nn.Linear(128, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=0),
+            nn.Flatten(),
+            nn.Linear(1960,10)
+        )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll06(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=0) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=0) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(320, 280))
+        bb_layers.append(nn.Linear(280, 84))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=0),
+            nn.Flatten(),
+            nn.Linear(1960,10)
+        )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(84,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll07(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=0) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=0) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(320, 374))
+        bb_layers.append(nn.Linear(374, 70))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=0),
+            nn.Flatten(),
+            nn.Linear(1960,10)
+        )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(70,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll08(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=0) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=0) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(320, 374)) #11,17,2
+        bb_layers.append(nn.Linear(374, 77))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=0),
+            nn.Flatten(),
+            nn.Linear(1960,77),
+            nn.Linear(77,10)
+        )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(77,10)
+        )
+        self.exits.append(eeF)
+
+class B_Lenet_t_imgnet_ll09(B_Lenet):
+    def _build_backbone(self):
+        strt_bl = ConvPoolAc(3, 5, kernel=5, stride=1, padding=0)
+        self.backbone.append(strt_bl)
+
+        #adding ConvPoolAc blocks - remaining backbone
+        bb_layers = []
+        bb_layers.append(ConvPoolAc(5, 10, kernel=5, stride=1, padding=0) )
+        bb_layers.append(ConvPoolAc(10, 20, kernel=5, stride=1, padding=0) )
+        bb_layers.append(nn.Flatten())
+        bb_layers.append(nn.Linear(320, 494)) #2,13,19
+        bb_layers.append(nn.Linear(494, 77))
+
+        remaining_backbone_layers = nn.Sequential(*bb_layers)
+        self.backbone.append(remaining_backbone_layers)
+
+    #adding early exits/branches
+    def _build_exits(self):
+        #early exit 1
+        ee1 = nn.Sequential(
+            ConvPoolAc(5, 10, kernel=3, stride=1, padding=0),
+            nn.Flatten(),
+            nn.Linear(1960,35),
+            nn.Linear(35,10)
+        )
+        self.exits.append(ee1)
+
+        #final exit
+        eeF = nn.Sequential(
+            nn.Linear(77,10)
+        )
+        self.exits.append(eeF)
+
 class B_Alexnet_cifar(B_Lenet):
     # attempt 1 exit alexnet
     def __init__(self, exit_threshold=0.5):
