@@ -58,8 +58,8 @@ def get_save_path(model_name, notes_path, timestamp=True, desc=None, show=True, 
     save_path += f'.{filetype}'
 
     save_path = os.path.join(notes_path,save_path)
-    if show:
-        print("Storing the test results at", save_path)
+    #if show:
+    print("Storing the test results at", save_path)
     return save_path
 
 def test_only(args):
@@ -116,10 +116,9 @@ def test_only(args):
     if args.notes_path is not None:
         notes_path = args.notes_path
     else:
-        notes_path = os.path.join(os.path.split(args.trained_model_path)[0],'jsons')
+        notes_path = f'./outputs/{args.model_name}/jsons/'
         if not os.path.exists(notes_path):
             os.makedirs(notes_path)
-
 
     if args.threshold_range is not None and args.threshold_step is not None:
         if len(args.threshold_range) == 2:
