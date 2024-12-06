@@ -53,9 +53,8 @@ class Tester:
                 top1acc_thresholds,
                 top1acc_thresholds,
                 top1acc_thresholds,
+                top1acc_thresholds,
                 ]
-        #TODO
-        #,top1acc_thresholds,top1acc_thresholds,top1acc_thresholds
 
         # list of AVAILABLE conf threshold methods
         self.conf_list = [
@@ -63,6 +62,7 @@ class Tester:
                 self._thr_max_softmax,
                 self._thr_max_softmax_fast,
                 self._thr_max_softmax_fast_noTrunc,
+                self._thr_max_softmax_fast_sub
             ]
 
         # select functions chosen during cli
@@ -114,14 +114,6 @@ class Tester:
                 if self.save_raw:
                     self.stats_dict['conf_metrics'][str(func.__name__)]["raw_softmax"] = None
 
-            #        "Entropy",
-            #        self._thr_entropy,
-            #        "Softmax",
-            #        self._thr_max_softmax,
-            ##        "Trunc Base-2 Softmax",
-            ##        self._fast_softmax_comparison,
-            ##        "Non-Trunc Base-2 Softmax",
-            ##        self._base2_softmax_comparison,
             ##        "Base-2 Sub-Softmax",
             ##        self._base2_sub_softmax_comparison,
 
@@ -146,7 +138,7 @@ class Tester:
 
     def _thr_max_softmax_fast(self, exit_results, thr):
         # max softmax function but with base 2 usage
-        # 2 to power of truncated logit values
+        # 2 to power of truncated logit values - integer component
         pow2 = torch.pow(2, torch.trunc(exit_results))
         # normalise exp wrt sum of exp
         pow2_max = pow2.div(pow2.sum(dim=-1).unsqueeze(1))
@@ -157,7 +149,7 @@ class Tester:
         return exit_mask
 
     def _thr_max_softmax_fast_noTrunc(self, exit_results, thr):
-        # max softmax function but with base 2 usage
+        # max softmax function but with base 2 usage and no truncation
         # 2 to power of logit values
         pow2 = torch.pow(2, exit_results)
         # normalise exp wrt sum of exp
@@ -168,9 +160,38 @@ class Tester:
         exit_mask = sftmx_max.gt(thr)
         return exit_mask
 
-    def _thr_max_softmax_fast_noTrunc(self, exit_results, thr):
-        # TODO implement sub version
-        raise NotImplementedError("sub non trunc version not implemented.")
+    def _thr_max_softmax_fast_sub(self, exit_results, thr):
+        #raise NotImplementedError("sub version not implemented.")
+        # TODO make these variables:
+        IN_FRAC_W = 8
+        IN_INT_W = 8
+        IN_TOT_W = IN_INT_W + IN_FRAC_W
+        ACCUM_INT_W = 1
+        ACCUM_FRAC_W = 28
+        ACCUM_TOT_W = ACCUM_INT_W + ACCUM_FRAC_W
+
+        # find max value
+        batch_max = torch.max(exit_results, dim=-1).values
+        # using bit accurate lib, subtract max from each value
+        # TODO bit accurate
+        # take integer component of results
+        # negate (on hw this is NOT and +1)
+        subs = -torch.trunc(exit_results - batch_max.unsqueeze(1))
+        #print(subs)
+        # IF negate > num of frac bits
+        nzero_mask = subs.lt(ACCUM_FRAC_W)
+        shifters = torch.ones(subs.shape, device=self.device)
+            # THEN
+                # result is too small to care, 2^val = 0
+            # ELSE:
+                # take 1.0...0 bitacc val and shift right by negation result
+        # FIXME can't do bitwise shift for floats, do division instead lol
+        #masked_shift = shifters[zero_mask].bitwise_right_shift(subs[zero_mask])
+        shifters[nzero_mask] = shifters[nzero_mask].div(torch.pow(2, subs[nzero_mask]))
+        # sum the values
+        # exit IF 1 > sum * thr
+        exit_mask = shifters.sum(dim=-1).mul(thr).le(1)
+        return exit_mask
 
     def _thr_compare_(self, exit_track, accu_track,
             results, gnd_trth, thrs, thr_func):
@@ -196,55 +217,6 @@ class Tester:
             )
             # update exit mask
             prev_mask = exit_mask
-
-    #### lr versions of comparison stuff
-    #def _entropy_comparison(
-    #    self, layer: torch.Tensor, thresh: float, test=False
-    #) -> bool:
-    #    softmax = nn.functional.softmax(layer, dim=-1)
-    #    entr = -torch.sum(torch.nan_to_num(softmax * torch.log(softmax)), dim=-1)
-
-    #    if test:
-    #        return entr < thresh, entr
-    #    else:
-    #        return entr < thresh
-
-    #def _softmax_comparison(
-    #    self, layer: torch.Tensor, thresh: float, test=False
-    #) -> torch.Tensor:
-    #    softmax = nn.functional.softmax(layer, dim=-1)
-    #    # breakpoint()
-
-    #    sftmx_max = torch.max(softmax, dim=-1).values
-
-    #    if test:
-    #        return sftmx_max > thresh, softmax
-    #    else:
-    #        return sftmx_max > thresh
-
-    #def _fast_softmax_comparison(
-    #    self, layer: torch.Tensor, thresh: float, test=False
-    #) -> bool:
-    #    softmax = hw_sim.base2_softmax_torch(layer)
-    #    # softmax = hw_sim.subMax_softmax(exit)
-    #    sftmx_max = torch.max(softmax, dim=-1).values
-
-    #    if test:
-    #        return sftmx_max > thresh, softmax
-    #    else:
-    #        return sftmx_max > thresh
-
-    #def _base2_softmax_comparison(
-    #    self, layer: torch.Tensor, thresh: float, test=False
-    #) -> bool:
-    #    softmax = hw_sim.nonTrunc_base2_softmax_torch(layer)
-    #    # softmax = hw_sim.subMax_softmax(exit)
-    #    sftmx_max = torch.max(softmax, dim=-1).values
-
-    #    if test:
-    #        return sftmx_max > thresh, softmax
-    #    else:
-    #        return sftmx_max > thresh
 
     def _base2_sub_softmax_comparison(
         self, layer: torch.Tensor, thresh: float, test=False
