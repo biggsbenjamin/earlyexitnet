@@ -108,11 +108,12 @@ def base2_subMax_softmax_fixed(
     # define the fixed point precision of the exponential computation to be performed
     # the operation is returns a value in the range 0-1 so 1 bit is for the integer part
     # and the remaining bits are for the fractional part
-    NUM_EXP_BITS = 16
+    NUM_EXP_BITS = 28 #this would be the 28, output for exp vals
     EXP = Fxp(
         None, signed=False, n_word=NUM_EXP_BITS, n_frac=NUM_EXP_BITS - 1
     )  # sacrificing many bits
 
+    # transfer logit back to cpu and numpy array (to work with fxp)
     zs = final_layer.cpu().numpy()
 
     # convert to fixed point
@@ -132,20 +133,33 @@ def base2_subMax_softmax_fixed(
 
     # create the array of the resulting exponential computation
     exp_zs = Fxp(np.ones(fxd_zs.shape)).like(EXP)
-    # set the rounding mode to around, so that underflow goes to 0
-    exp_zs.rounding = "around"
+    # set the rounding mode to around, so rounding to nearest frac val
+    #exp_zs.rounding = "around"
+    # setting rounding and overflow behaviour to vitis like:
+    exp_zs.overflow = 'wrap'
+    exp_zs.rounding = 'around' #'floor'
 
+    # max is already truncated so other other vals need to be too
     # extract integer part of the fixed point value
     fxd_zs = np.trunc(fxd_zs)
     # normalize so all value are negative
     fxd_zs -= max_z
     # make all values positive
-    exponents = abs(fxd_zs.get_val())
+    #exponents = abs(fxd_zs.get_val()) # NOTE maybe different to hw negation
+    exponents = ~(fxd_zs)
+    exponents = exponents + 1
 
     # compute the exponentiation operation by
     # shifting the ones defined earlier right by the amount defined in exponents
     # this is done by shifting the underlying representation as fxp doesn't support this operation
-    exp_zs.val >>= exponents.astype(np.uint64)
+    #exp_zs.val >>= exponents.astype(np.uint64)
+    exp_zs.val >>= exponents.get_val().astype(np.uint64)
+
+    # FIXME bitwise ops can be done, just needs a work around
+    #exp_zs = exp_zs >> exponents.astype(np.uint64)
+    #shiftmask = exponents.lt(NUM_EXP_BITS)
+    #exp_zs[shiftmask] = exp_zs[] >> exponents.astype(np.uint64)
+
 
     # define the variable where the sum will be accumulated
     exp_sum = Fxp(0, signed=False, n_word=36, n_frac=31)
@@ -159,9 +173,7 @@ def base2_subMax_softmax_fixed(
             1,
         ),
     )
-
     return exp_zs, exp_sum
-
 
 def main():
     # print(quick_exp(-4))
@@ -187,29 +199,37 @@ def main():
 
     # test = torch.randn(10)
 
-    print(test)
+    print('test logit:', test)
     torch_vec = base2_softmax_torch(test)
-    print(torch_vec)
+    print('base2 softmax using torch:', torch_vec)
     slow = base2_softmax_slow(test)
-    print(slow)
+    print('slow base2 softmax', slow)
+    print("difference between torch vec and slow:", torch.sub(torch_vec, slow))
 
     sub = base2_sub_softmax_torch(test)
-    print(sub)
+    print('base 2 sub', sub)
 
-    fixed_sub = base2_subMax_softmax_fixed(test)
-    print(fixed_sub)
-    print("difference:", torch.sub(torch_vec, slow))
-    print(torch.softmax(test, dim=-1))
+    fixed_sub_zs_arr, fixed_sub_sum_arr = base2_subMax_softmax_fixed(test)
+    ## result of base2_subMax_softmax_fixed is tuple of fxp objects
+    ## requires Tensor to be compatible torch.sub
+    fixed_sub_zs = torch.from_numpy(fixed_sub_zs_arr.get_val())
+    fixed_sub_sum = torch.from_numpy(fixed_sub_sum_arr.get_val())
+    print('fixed sub zs:', fixed_sub_zs)
+    print('fixed sub sum:', fixed_sub_sum)
+
+    print('OG torch sftmx:', torch.softmax(test, dim=-1))
     diff1 = torch.sub(torch_vec, torch.softmax(test, dim=-1))
     diff2 = torch.sub(slow, torch.softmax(test, dim=-1))
     diff3 = torch.sub(sub, torch.softmax(test, dim=-1))
-    diff4 = torch.sub(fixed_sub, torch.softmax(test, dim=-1))
     print("difference quick:", diff1, torch.norm(diff1))
     print("difference slow:", diff2, torch.norm(diff2))
     print("difference sub:", diff3, torch.norm(diff3))
+    print('converting values to fxp, calculating exp and sum, returning to float, performing division')
+    print('So bit accurate up to the division (which would be a multiplication for the hw)')
+    diff4 = torch.sub(torch.div(fixed_sub_zs, fixed_sub_sum), torch.softmax(test, dim=-1))
     print("difference fixed sub:", diff4, torch.norm(diff4))
 
-    print(baseE_subMax_softmax_float(test))
+    #print(baseE_subMax_softmax_float(test))
 
     # for i in range(100):
     #   test = np.random.default_rng().uniform(low=-128, high=128, size=10)

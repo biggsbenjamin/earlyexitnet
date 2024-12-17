@@ -54,6 +54,7 @@ class Tester:
                 top1acc_thresholds,
                 top1acc_thresholds,
                 top1acc_thresholds,
+                top1acc_thresholds,
                 ]
 
         # list of AVAILABLE conf threshold methods
@@ -62,7 +63,8 @@ class Tester:
                 self._thr_max_softmax,
                 self._thr_max_softmax_fast,
                 self._thr_max_softmax_fast_noTrunc,
-                self._thr_max_softmax_fast_sub
+                self._thr_max_softmax_fast_sub,
+                self._thr_max_softmax_fast_sub_bitAcc
             ]
 
         # select functions chosen during cli
@@ -161,16 +163,17 @@ class Tester:
         return exit_mask
 
     def _thr_max_softmax_fast_sub(self, exit_results, thr):
-        #raise NotImplementedError("sub version not implemented.")
         # TODO make these variables:
-        IN_FRAC_W = 8
-        IN_INT_W = 8
-        IN_TOT_W = IN_INT_W + IN_FRAC_W
-        ACCUM_INT_W = 1
+        # Input fixed datatype
+        #IN_FRAC_W = 8
+        #IN_INT_W = 8
+        #IN_TOT_W = IN_INT_W + IN_FRAC_W
+        # Internal accumulation datatype
+        #ACCUM_INT_W = 1
         ACCUM_FRAC_W = 28
-        ACCUM_TOT_W = ACCUM_INT_W + ACCUM_FRAC_W
+        #ACCUM_TOT_W = ACCUM_INT_W + ACCUM_FRAC_W
 
-        # find max value
+        # find max value - not affected by precision (in a meaningful way)
         batch_max = torch.max(exit_results, dim=-1).values
         # using bit accurate lib, subtract max from each value
         # TODO bit accurate
@@ -179,18 +182,24 @@ class Tester:
         subs = -torch.trunc(exit_results - batch_max.unsqueeze(1))
         #print(subs)
         # IF negate > num of frac bits
-        nzero_mask = subs.lt(ACCUM_FRAC_W)
-        shifters = torch.ones(subs.shape, device=self.device)
+        nzero_mask = subs.lt(ACCUM_FRAC_W) # true value is not shifted
+        shifters = torch.zeros(subs.shape, device=self.device)
             # THEN
                 # result is too small to care, 2^val = 0
             # ELSE:
                 # take 1.0...0 bitacc val and shift right by negation result
         # FIXME can't do bitwise shift for floats, do division instead lol
-        #masked_shift = shifters[zero_mask].bitwise_right_shift(subs[zero_mask])
+        shifters[nzero_mask] = 1.0
         shifters[nzero_mask] = shifters[nzero_mask].div(torch.pow(2, subs[nzero_mask]))
         # sum the values
         # exit IF 1 > sum * thr
         exit_mask = shifters.sum(dim=-1).mul(thr).le(1)
+        return exit_mask
+
+    def _thr_max_softmax_fast_sub_bitAcc(self, exit_results, thr):
+        print('er shape:', exit_results.shape)
+        eToz_arr, sum_eToz_arr = hw_sim.base2_subMax_softmax_fixed(exit_results)
+        raise NotImplementedError("BP")
         return exit_mask
 
     def _thr_compare_(self, exit_track, accu_track,
@@ -218,25 +227,26 @@ class Tester:
             # update exit mask
             prev_mask = exit_mask
 
-    def _base2_sub_softmax_comparison(
-        self, layer: torch.Tensor, thresh: float, test=False
-    ) -> bool:
-        exp, sums = hw_sim.base2_subMax_softmax_fixed(layer)
-        # softmax = hw_sim.subMax_softmax(exit)
-        # sftmx_max = torch.max(softmax, dim=-1).values
+    # NOTE keeping commented func for rebase with data analysis
+    #def _base2_sub_softmax_comparison(
+    #    self, layer: torch.Tensor, thresh: float, test=False
+    #) -> bool:
+    #    exp, sums = hw_sim.base2_subMax_softmax_fixed(layer)
+    #    # softmax = hw_sim.subMax_softmax(exit)
+    #    # sftmx_max = torch.max(softmax, dim=-1).values
 
-        max_exp = np.max(exp, -1)
+    #    max_exp = np.max(exp, -1)
 
-        threshes = (sums * thresh).flatten()
+    #    threshes = (sums * thresh).flatten()
 
-        # breakpoint()
-        if test:
-            return (
-                torch.BoolTensor(max_exp > threshes, type=bool),
-                torch.Tensor(exp.get_val()) / torch.Tensor(sums.get_val()),
-            )
-        else:
-            return torch.BoolTensor(max_exp > threshes)
+    #    # breakpoint()
+    #    if test:
+    #        return (
+    #            torch.BoolTensor(max_exp > threshes, type=bool),
+    #            torch.Tensor(exp.get_val()) / torch.Tensor(sums.get_val()),
+    #        )
+    #    else:
+    #        return torch.BoolTensor(max_exp > threshes)
 
     def _test_multi_exit(self):
         self.model.eval()
@@ -248,14 +258,15 @@ class Tester:
             ) as pbar:
                 for xb, yb in self.test_dl:
                     xb, yb = xb.to(self.device), yb.to(self.device)
-                    res = self.model(xb)
                     # implicitly calls forward and returns array of arrays of the
                     # final layer for each exit (techically list of tensors for each exit)
                     # res has dimension [num_exits, batch_size, num_classes]
+                    res = self.model(xb)
 
                     # accuracy of exits over everything
                     self.accu_track_totl.update_correct(res,yb)
 
+                    # Compute confidence values for each metric
                     for (conf,thrs) in self.conf_funcs:
                         self._thr_compare_(
                                 self.tracker_dict[str(conf.__name__)]['exit'],
@@ -265,7 +276,8 @@ class Tester:
                                 conf
                             )
 
-                    # still not completely sure what this does
+                    # NOTE still not completely sure what this does
+                    # leaving in for rebase with data_analysis
                     if self.save_raw:
                         self.true_result = (
                             torch.cat((self.true_result, yb))
