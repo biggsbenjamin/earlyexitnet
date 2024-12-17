@@ -318,22 +318,14 @@ class ResNet8_2EE(ResNet8_backbone):
     @torch.jit.unused #decorator to skip jit comp (required for onnx conversion)
     def _forward_training(self, x):
         # TODO make jit compatible - not urgent
-        # NOTE broken because returning list()
-
-        ### NOTE previous version used lists, new version might not keep all exits? might be more efficient?
-        # res = []
         y = self.init_conv(x)
-        #res.append(self.exits[0](y))
-
         early_exit = self.exits[0](y)
         # compute remaining backbone layers
         for b in self.backbone:
             y = b(y)
         # final exit
-        #y = self.end_layers(y)
         final_exit = self.end_layers(y)
-
-        #res.append(y)
+        # NOTE only 2 layers so no for loop needed
         res = torch.stack((early_exit, final_exit), dim=0)
         return res
 

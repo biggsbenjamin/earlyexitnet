@@ -146,18 +146,23 @@ class B_Lenet(nn.Module):
     def _forward_training(self, x):
         ### FIXME what do these changes do?
         #res=[]
-        res = None
-        num_batch = x.size(0)
-        for bb, ee in zip(self.backbone, self.exits):
+        #res = None
+        #num_batch = x.size(0)
+        # calculate 1st exit
+        x = self.backbone[0](x)
+        res = self.exits[0](x).unsqueeze(0)
+        # complete next stages and concantenate results
+        for bb, ee in zip(self.backbone[1:], self.exits[1:]):
             x = bb(x)
             #res.append(ee(x))
-
             # none of the tmp stuff applies
-            tmp = ee(x)
-            num_classes = tmp.size(1)
+            tmp = ee(x).unsqueeze(0)
 
-            tmp = tmp.reshape(1, num_batch, num_classes) # resize from [B, C] to [1, B, C] to then stack it along the first dimension
-            res = tmp if res is None else torch.cat((res,tmp), dim=0)
+            #num_classes = tmp.size(1)
+            # resize from [B, C] to [1, B, C] to then stack it along the first dimension
+            #tmp = tmp.reshape(1, num_batch, num_classes)
+            #res = tmp if res is None else torch.cat((res,tmp), dim=0)
+            res = torch.cat((res,tmp), dim=0)
         return res
 
     def forward(self, x):
