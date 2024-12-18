@@ -102,77 +102,84 @@ def baseE_subMax_softmax_float(final_layer: torch.Tensor) -> list[float]:
 def base2_subMax_softmax_fixed(
     final_layer: torch.Tensor,
 ) -> tuple[np.array, np.array]:
+    # NOTE DOES NOT compute the normalisation step of the 'softmax'
+
     # define the fixed point precision of the incoming final activation layer
     LAYER = Fxp(None, signed=True, n_word=16, n_frac=8)
+    # precision DOES NOT auto produce best fitting result, maintains current var prec
+    LAYER.config.op_sizing = 'same'
 
     # define the fixed point precision of the exponential computation to be performed
     # the operation is returns a value in the range 0-1 so 1 bit is for the integer part
     # and the remaining bits are for the fractional part
-    NUM_EXP_BITS = 28 #this would be the 28, output for exp vals
-    EXP = Fxp(
-        None, signed=False, n_word=NUM_EXP_BITS, n_frac=NUM_EXP_BITS - 1
-    )  # sacrificing many bits
+    NUM_EXP_BITS = 16 #this would be the 28, output for exp vals
+    EXP = Fxp(None, signed=False, n_word=NUM_EXP_BITS,
+            n_frac=NUM_EXP_BITS - 1)
+    EXP.config.op_sizing = 'same'
 
     # transfer logit back to cpu and numpy array (to work with fxp)
     zs = final_layer.cpu().numpy()
-
     # convert to fixed point
     fxd_zs = Fxp(zs).like(LAYER)
+    # find the maximum value
+    max_z = np.reshape(np.max(fxd_zs, -1), (-1, 1, ))
+    # normalize so all value are negative
+    fxd_zs -= max_z
 
-    num_batches = final_layer.size(dim=0)
-    # find the maximum value and keep integer part
-    max_z = np.trunc(np.max(fxd_zs, -1))
-    # resize from [B, 1, 1] to [B, 1]
-    max_z = np.reshape(
-        max_z,
-        (
-            num_batches,
-            1,
-        ),
-    )
+    # max is already truncated so other other vals need to be too
+    # extract integer part of the fixed point value
+    fxd_zs = np.trunc(fxd_zs)
+    # make all values positive
+    #exponents = abs(fxd_zs.get_val()) # NOTE maybe different to hw negation
+    exponents = ~(fxd_zs)
+    exponents = exponents + 1
 
     # create the array of the resulting exponential computation
     exp_zs = Fxp(np.ones(fxd_zs.shape)).like(EXP)
+    exp_zs.config.op_sizing = 'same'
     # set the rounding mode to around, so rounding to nearest frac val
     #exp_zs.rounding = "around"
     # setting rounding and overflow behaviour to vitis like:
     exp_zs.overflow = 'wrap'
     exp_zs.rounding = 'around' #'floor'
 
-    # max is already truncated so other other vals need to be too
-    # extract integer part of the fixed point value
-    fxd_zs = np.trunc(fxd_zs)
-    # normalize so all value are negative
-    fxd_zs -= max_z
-    # make all values positive
-    #exponents = abs(fxd_zs.get_val()) # NOTE maybe different to hw negation
-    exponents = ~(fxd_zs)
-    exponents = exponents + 1
-
     # compute the exponentiation operation by
     # shifting the ones defined earlier right by the amount defined in exponents
     # this is done by shifting the underlying representation as fxp doesn't support this operation
     #exp_zs.val >>= exponents.astype(np.uint64)
     exp_zs.val >>= exponents.get_val().astype(np.uint64)
+    #exp_zs.info()
 
     # FIXME bitwise ops can be done, just needs a work around
     #exp_zs = exp_zs >> exponents.astype(np.uint64)
     #shiftmask = exponents.lt(NUM_EXP_BITS)
     #exp_zs[shiftmask] = exp_zs[] >> exponents.astype(np.uint64)
 
-
     # define the variable where the sum will be accumulated
-    exp_sum = Fxp(0, signed=False, n_word=36, n_frac=31)
-    # compute sum
+    exp_sum = Fxp(np.zeros(max_z.shape), signed=False, n_word=32, n_frac=16)
+    exp_sum.config.op_sizing = 'same'
+
+    #### expr ###
+    #test_sum = Fxp(np.zeros(max_z.shape)).like(exp_sum)
+    ## NOTE seems like both methods result in the same values BUT
+    ## precision changes - may incur error for edge cases
+    #for ex,ts in zip(exp_zs, test_sum):
+    #    for n in ex:
+    #        ts[0] += n
+
+    #test_sum.info()
+
+    #s = np.reshape(np.sum(exp_zs, -1), (-1,1,))
+    #s.info()
+
+    #diff = s - test_sum
+    #diff.info()
+    #### expr ###
+
+    # compute sum, equal() used so that final var is expected precision
+    #exp_sum.equal(np.reshape(np.sum(exp_zs, -1), (-1, 1, )))
+    # NOTE removing reshape for working with other vals
     exp_sum.equal(np.sum(exp_zs, -1))
-    # reshape from [B, 1, 1] to [B, 1]
-    exp_sum = np.reshape(
-        exp_sum,
-        (
-            num_batches,
-            1,
-        ),
-    )
     return exp_zs, exp_sum
 
 def main():

@@ -197,9 +197,20 @@ class Tester:
         return exit_mask
 
     def _thr_max_softmax_fast_sub_bitAcc(self, exit_results, thr):
-        print('er shape:', exit_results.shape)
+        # getting the fxp object for the results
         eToz_arr, sum_eToz_arr = hw_sim.base2_subMax_softmax_fixed(exit_results)
-        raise NotImplementedError("BP")
+
+        # do we want to stay bitAcc here?
+        # whats left?
+        # have each of the values in eToz_arr,
+        # have the accums in the sum var
+        # don't actually need each of the vals, just the sums
+        # because of the max subtraction
+        # mul is done in bitAcc fashion so that's fine to change prec
+
+        mm_res = np.less_equal(np.multiply(sum_eToz_arr, thr), 1)
+        # boolean array, convert back to torch
+        exit_mask = torch.from_numpy(mm_res.get_val()).to(self.device).gt(0)
         return exit_mask
 
     def _thr_compare_(self, exit_track, accu_track,
