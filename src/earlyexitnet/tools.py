@@ -246,7 +246,7 @@ class Tracker: #NOTE need to change add_ methods if more avgs required
         # [[bin0,bin1,...,binN],[bin0,bin1,...,binN],...,lossN]
         #convert to numpy array and sum across val dimension
         self.set_length_accum = np.full((self.bin_num,), len(val_array))
-        self.val_bins = np.sum(np.array(val_array), axis=0)
+        self.val_bins += np.sum(np.array(val_array), axis=0)
         assert self.val_bins.shape[0] == self.bin_num,\
                 f"bin mismatch {self.bin_num} with incoming array{self.val_bins.shape}"
 
@@ -293,7 +293,7 @@ class LossTracker(Tracker): #NOTE need to change add_ methods if more avgs requi
 
     ### functions to use ###
     def add_loss(self,value,bin_index=None): #adds loss(es) for single iteration
-        super().add_val(value,bin_index)
+        super().add_val(value,bin_index=bin_index)
 
     def add_losses(self,val_array): #list of lists
         super().add_vals(val_array)
@@ -307,6 +307,7 @@ class AccuTracker(Tracker):
             ):
         #init vars
         super().__init__(batch_size,bins,set_length)
+
     def _init_vars(self, #NOTE can you overloaded parent function
             batch_size,
             bins,
@@ -321,9 +322,11 @@ class AccuTracker(Tracker):
         self.set_length_accum = np.zeros(bins,dtype=int)
     def get_num_correct(self, preds, labels):
         #predictions from model (not one hot), correct labels
-        return preds.argmax(dim=1).eq(labels).sum().item()
+        return preds.argmax(dim=-1).eq(labels).sum().item()
 
     ### functions to use ###
+
+    # bb version
     def add_val(self,value,accum_count=None,bin_index=None):
         if accum_count is None:
             accum_count = self.batch_size
@@ -345,10 +348,12 @@ class AccuTracker(Tracker):
         self.set_length_accum[bin_index] += accum_count
         return
 
+    # bb version
     def update_correct(self,result,label,
             accum_count=None,bin_index=None): #for single iteration
         if accum_count is None:
             accum_count = self.batch_size
+
         if bin_index is None and len(result) > 1 and self.bin_num > 1:
             count = [self.get_num_correct(val,label) for val in result]
         else:
@@ -356,14 +361,30 @@ class AccuTracker(Tracker):
                 count = self.get_num_correct(result[-1],label)
             else:
                 count = self.get_num_correct(result,label)
-        self.add_val(count,accum_count,bin_index)
+
+        self.add_val(count,accum_count,bin_index=bin_index)
+
+    # lr version
+    #def update_correct(self,result,label,bin_index=None): #for single iteration
+    #    if bin_index is None and len(result) > 1 and self.bin_num > 1:
+    #        count = [self.get_num_correct(val,label) for val in result]
+    #    else:
+    #        if isinstance(result, list):
+    #            count = self.get_num_correct(result[-1],label)
+    #        else:
+    #            count = self.get_num_correct(result,label)
+
+    #    super().add_val(count,bin_index=bin_index)
 
     def update_correct_list(self,res_list,lab_list=None): #list of lists of lists
         # [[bin0,bin1,...,binN],[bin0,bin1,...,binN],...,sampN], [label0,...labelN]
         if lab_list is not None:
-            assert len(res_list) == len(lab_list), "AccuTracker: sample size mismatch"
-            super().add_vals([[self.get_num_correct(res,label) for res in results]
-                                        for label,results in zip(lab_list,res_list)])
+            # FIXME not sure if the following edit makes sense, res_list size exit_nums? might be batch testing issue?
+            #assert len(res_list) == len(lab_list), "AccuTracker: sample size mismatch"
+            assert len(res_list[0]) == len(lab_list), "AccuTracker: sample size mismatch"
+            # results = [[self.get_num_correct(res,label) for res in results] for label,results in zip(lab_list,res_list)] old
+            results = [self.get_num_correct(exit_layer, lab_list) for exit_layer in res_list]
+            super().add_val(results)
         else:
             super().add_vals(res_list)
     def get_accu(self,return_list=False):
@@ -414,10 +435,13 @@ def save_model(model, path, file_prefix='', seed=None, epoch=None, opt=None,
     print("Saved to:", file_path)
     return file_path
 
-def load_model(model, path, strict=True):
+def load_model(model, path, strict=True, device=None):
     #TODO add "warmstart" - partial reloading of model, useful for backbone pre_training
     #loads the model from the path specified
-    checkpoint = torch.load(path)
+    if device is None:
+        checkpoint = torch.load(path)
+    else:
+        checkpoint = torch.load(path, map_location = device)
     model.load_state_dict(checkpoint['model_state_dict'], strict=strict)
 
     #TODO optionals

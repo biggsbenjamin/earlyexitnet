@@ -142,19 +142,31 @@ class B_Lenet(nn.Module):
             top1 = torch.max(pk) #x)
             return top1 > self.exit_threshold
 
-    @torch.jit.unused #decorator to skip jit comp
+    @torch.jit.unused #decorator to skip jit comp (needed for onnx conversion)
     def _forward_training(self, x):
-        #TODO make jit compatible - not urgent
-        #broken because returning list()
-        res = []
-        for bb, ee in zip(self.backbone, self.exits):
+        ### FIXME what do these changes do?
+        #res=[]
+        #res = None
+        #num_batch = x.size(0)
+        # calculate 1st exit
+        x = self.backbone[0](x)
+        res = self.exits[0](x).unsqueeze(0)
+        # complete next stages and concantenate results
+        for bb, ee in zip(self.backbone[1:], self.exits[1:]):
             x = bb(x)
-            res.append(ee(x))
+            #res.append(ee(x))
+            # none of the tmp stuff applies
+            tmp = ee(x).unsqueeze(0)
+
+            #num_classes = tmp.size(1)
+            # resize from [B, C] to [1, B, C] to then stack it along the first dimension
+            #tmp = tmp.reshape(1, num_batch, num_classes)
+            #res = tmp if res is None else torch.cat((res,tmp), dim=0)
+            res = torch.cat((res,tmp), dim=0)
         return res
 
     def forward(self, x):
         #std forward function - add var to distinguish be test and inf
-
         if self.fast_inference_mode:
             for bb, ee in zip(self.backbone, self.exits):
                 x = bb(x)

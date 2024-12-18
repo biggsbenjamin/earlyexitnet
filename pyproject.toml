@@ -22,10 +22,11 @@ dependencies = [
     "torch==1.13.1",
     "torchvision>=0.8.2",
     "onnx-simplifier>=0.3.5",
-    "numpy==1.19.2",
+    "numpy==1.20",
     "scipy>=1.2.1",
     "matplotlib",
-    "onnx2pytorch"
+    "fxpmath",
+    "tqdm"
 ]
 
 [project.optional-dependencies]

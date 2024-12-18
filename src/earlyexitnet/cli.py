@@ -25,7 +25,13 @@ import torch.nn as nn
 import torch
 # general imports
 import os
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta
+
+from time import perf_counter
+import json
+from tqdm import tqdm
+import numpy as np
+
 
 def get_exits(model_str):
     # NOTE only used if there is no exit num constant
@@ -37,11 +43,34 @@ def get_exits(model_str):
                        'b_lenet_se','b_lenet_cifar']:
         exits = 2
     else:
-        raise NameError("Model not supported, check name:",args.model_name)
+        raise NameError("Model not supported, check name:",model_str)
 
     return exits
 
+def get_save_path(model_name, notes_path, timestamp=True, desc=None, show=True, filetype='json'):
+    save_path = model_name
+    if desc is not None:
+        save_path += f"_{desc}"
+    if timestamp:
+        ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
+        save_path += f"_{ts}"
+
+    save_path += f'.{filetype}'
+
+    save_path = os.path.join(notes_path,save_path)
+    #if show:
+    print("Storing the test results at", save_path)
+    return save_path
+
 def test_only(args):
+    """Given the parameters passed in the command line, run tests on a given model
+
+    Args:
+        args: CLI arguments
+
+    Returns:
+        None
+    """
     model = get_model(args.model_name)
     # get number of exits
     if hasattr(model,'exit_num'):
@@ -55,7 +84,19 @@ def test_only(args):
     batch_size_test = args.batch_size_test #test bs in branchynet
     print("Setting up for testing")
     #load in the model from the path
-    load_model(model, args.trained_model_path)
+
+    # Device setup
+    if torch.cuda.is_available() and args.gpu_target is not None:
+        device = torch.device(f"cuda:{args.gpu_target}")
+    else:
+        device = torch.device("cpu")
+    print("Device:", device)
+
+    load_model(model, args.trained_model_path, device=device)
+
+    num_workers = 1 if args.num_workers is None else args.num_workers
+    print(f"Number of workers: {num_workers}")
+
     # check if there are thresholds provided
     if args.top1_threshold is None and \
             args.entr_threshold is None and \
@@ -65,97 +106,181 @@ def test_only(args):
         return model
     #skip to testing
     if args.dataset == 'mnist':
-        datacoll = MNISTDataColl(batch_size_test=batch_size_test)
+        datacoll = MNISTDataColl(batch_size_test=batch_size_test,num_workers=num_workers)
     elif args.dataset == 'cifar10':
-        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,no_scaling=args.no_scaling)
+        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,num_workers=num_workers, no_scaling=args.no_scaling)
     else:
         raise NameError("Dataset not supported, check name:",
                         args.dataset)
     # path to notes write up
-    notes_path = os.path.join(
-        os.path.split(args.trained_model_path)[0],'notes.txt')
-    # path to the model (already trained)
-    save_path = args.trained_model_path
-    # RUN THE MODEL OVER TEST DATASET
-    test(datacoll,model,exits,loss_f,save_path,notes_path,args)
-    return model
+    if args.notes_path is not None:
+        notes_path = args.notes_path
+    else:
+        notes_path = f'./outputs/{args.model_name}/jsons/'
+        if not os.path.exists(notes_path):
+            os.makedirs(notes_path)
 
-def test(datacoll,model,exits,loss_f,
-         save_path,notes_path,args):
-    # check if there are thresholds provided
-    if args.top1_threshold is None and \
-            args.entr_threshold is None and \
-            exits > 1:
+    if args.threshold_range is not None and args.threshold_step is not None:
+        if len(args.threshold_range) == 2:
+            test_multiple(datacoll,model,exits,loss_f,notes_path,args)
+        else:
+            raise NameError("Invalid amount of value for the threshold range:", len(args.threshold_range))
+    else:
+        # RUN THE MODEL OVER TEST DATASET
+        test_single(datacoll,model,exits,loss_f,notes_path,args)
+
+def test_multiple(datacoll,model,exits,loss_f,notes_path,args):
+    """Run multiples tests on a given model, varying the ealy-exit threshold linearly in a given range,
+    with a given step. Save the test results in JSON file
+
+    Args:
+        datacoll: Dataloader object
+        model : Loader model object
+        exits (_int_) : Number of exits for the given model
+        loss_f : Loss function (unused)
+        notes_path : Optional custom path for saving the output of the test
+        args : CLI arguments
+    """
+    step = args.threshold_step
+    min_thr, max_thr = args.threshold_range
+
+    num_tests = int((max_thr - min_thr)/step)
+    total_time = 0
+    running_time = 0
+
+    results = []
+
+    for i, thresh in enumerate(np.arange(min_thr, max_thr, step)):
+        rt_string = dt.utcfromtimestamp(timedelta(seconds=int(running_time)).total_seconds()).strftime("%M:%S")
+        tt_string = dt.utcfromtimestamp(timedelta(seconds=total_time).total_seconds()).strftime("%M:%S")
+        print(f"\nRunning test {i}/{num_tests}, thresh: {thresh} \t\t [{rt_string}/{tt_string}]")
+
+        elapsed_time, test_stats = run_test(datacoll,model,exits,[float(thresh)], None,loss_f,args) # ignore entropy threshold
+
+        results.append(test_stats)
+
+        running_time += elapsed_time
+        total_time = int((float(running_time) / (i+1)) * num_tests)
+
+    final_object = {}
+    final_object["model"] = args.model_name
+    final_object["dataset"] = args.dataset
+    final_object["thresholds"] = {"min_thr":min_thr, "max_thr":max_thr, "step":step}
+
+    final_object["test_vals"] = results
+
+    save_path = get_save_path(args.model_name, notes_path, desc="multiple")
+
+
+    with open(save_path, 'a') as output:
+        output.write(json.dumps(final_object, indent=2))
+
+
+def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = False):
+    """Run and time an individual test on entire dataset with given test parameters
+
+    Args:
+        datacoll: Dataloader object
+        model : Loader model object
+        exits (_int_) : Number of exits for the given model
+        top1_thr (_type_): Early-exit threshold used for softmax-like confidence functions
+        entr_thr (_type_): Early-exit threshold for entropy-like confidence functions
+        loss_f : Loss function (unused)
+        args : CLI arguments
+        save_raw (bool, optional): If True, final activation layer and softmax vectors are saved in return dict. Defaults to False.
+
+    Returns:
+        _tuple[float, dict]_: Elapsed time and dictionary containing all the test information
+    """
+
+    # Device setup
+    if torch.cuda.is_available() and args.gpu_target is not None:
+        device = torch.device(f"cuda:{args.gpu_target}")
+    else:
+        device = torch.device("cpu")
+    # print("Device:", device)
+
+    if top1_thr is None and entr_thr is None:
         # no thresholds provided, skip testing
         print("WARNING: No Thresholds provided, skipping testing.")
         return
-    elif args.top1_threshold is None:
+    elif top1_thr is None:
         # set useless threshold
-        args.top1_threshold=0
-    elif args.entr_threshold is None:
+        top1_thr=[0]
+    elif entr_thr is None:
         # set useless threshold
-        args.entr_threshold=1000000
+        entr_thr=[1000000]
     # set up test class then write results
-    test_dl = datacoll.get_test_dl()
     if exits>1:
-        if len(args.top1_threshold)+1 != exits or \
-            len(args.entr_threshold)+1 != exits:
-                raise ValueError(f"Not enough arguments for threshold. Expecting {exits-1}")
+        if len(top1_thr)+1 != exits or len(entr_thr)+1 != exits:
+            raise ValueError(f"Not enough arguments for threshold. Expecting {exits-1}")
         # Adding final exit thr - must exit here so tiny/huge depending on criteria
-        top1_thr = args.top1_threshold
         top1_thr.append(0)
-        entr_thr = args.entr_threshold
         entr_thr.append(1000000)
-        # Creating Tester object
-        net_test = Tester(model,test_dl,loss_f,exits,
-                top1_thr,entr_thr)
-    else:
-        net_test = Tester(model,test_dl,loss_f,exits)
 
-    top1_thr = net_test.top1acc_thresholds
-    entr_thr = net_test.entropy_thresholds
+    test_dl = datacoll.get_test_dl()
+    net_test = Tester(model,test_dl,loss_f,exits, top1_thr,entr_thr,args.confidence_function,device, save_raw)
+
+    start = perf_counter()
     net_test.test()
-    #get test results
-    test_size = net_test.sample_total
-    top1_pc = net_test.top1_pc
-    entropy_pc = net_test.entr_pc
-    top1acc = net_test.top1_accu
-    entracc = net_test.entr_accu
-    t1_tot_acc = net_test.top1_accu_tot
-    ent_tot_acc = net_test.entr_accu_tot
-    full_exit_accu = net_test.full_exit_accu
-    #get percentage exits and avg accuracies, add some timing etc.
-    print("top1 thrs: {},  entropy thrs: {}".format(top1_thr, entr_thr))
-    print("top1 exit %s {},  entropy exit %s {}".format(top1_pc, entropy_pc))
-    print("Accuracy over exited samples:")
-    print("top1 exit acc % {}, entropy exit acc % {}".format(top1acc, entracc))
-    print("Accuracy over network:")
-    print("top1 acc % {}, entr acc % {}".format(t1_tot_acc,ent_tot_acc))
-    print("Accuracy of the individual exits over full set: {}".format(full_exit_accu))
+    stop = perf_counter()
+    elapsed_time = stop-start
+
+    return elapsed_time, net_test.get_stats()
+
+def test_single(datacoll,model,exits,loss_f,notes_path,args):
+    """Run single test on a given model. Save the test results in JSON file
+
+    Args:
+        datacoll: Dataloader object
+        model : Loader model object
+        exits (_int_) : Number of exits for the given model
+        loss_f : Loss function (unused)
+        notes_path : Optional custom path for saving the output of the test
+        args : CLI arguments
+    """
+
+    save_raw = args.save_raw
+
+    elapsed_time, test_stats = run_test(datacoll,model,exits,args.top1_threshold, args.entr_threshold,loss_f,args,save_raw)
+
+    print("top1 thrs: {},  entropy thrs: {}".format(args.top1_threshold, args.entr_threshold))
+    print("Total time elapsed:", elapsed_time, "s")
 
     ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
-    with open(notes_path, 'a') as notes:
-        notes.write("\n#######################################\n")
-        notes.write(f"\nTesting results: for {args.model_name} @ {ts}\n  ")
-        notes.write(f"on dataset {args.dataset}\n")
-        notes.write("Test sample size: {}\n".format(test_size))
-        notes.write("top1 thrs: {},  entropy thrs: {}\n".format(top1_thr, entr_thr))
-        notes.write("top1 exit %s {}, entropy exit %s {}\n".format(top1_pc, entropy_pc))
-        notes.write("Tested model @ "+save_path+"\n")
-        notes.write("Accuracy over exited samples:\n")
-        notes.write("top1 exit acc % {}, entropy exit acc % {}\n".format(top1acc, entracc))
-        notes.write("Accuracy over EE network:\n")
-        notes.write("top1 acc % {}, entr acc % {}\n".format(t1_tot_acc,ent_tot_acc))
-        notes.write("Accuracy of the individual exits over full set: {}\n".format(full_exit_accu))
+    if not save_raw: # when saving raw output, txt file doesn't make sense
+        with open(get_save_path("test", notes_path, filetype='txt', timestamp=False), 'a') as notes:
+            notes.write("\n#######################################\n")
+            notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
+            notes.write(f"on dataset {args.dataset}:\n")
 
-        if args.run_notes is not None:
-            notes.write(args.run_notes+"\n")
-    notes.close()
+            notes.write(json.dumps(test_stats, indent=2))
+            notes.write('\n')
 
-"""
-Main training and testing function run from the cli
-"""
+            if args.run_notes is not None:
+                notes.write(args.run_notes+"\n")
+        notes.close()
+
+    final_object = {}
+    final_object["model"] = args.model_name
+    if hasattr(args,'trained_model_path') and args.trained_model_path is not None:
+        final_object["model_path"] = args.trained_model_path
+    final_object["dataset"] = args.dataset
+
+    final_object["test_vals"] = test_stats
+
+    save_path = get_save_path(args.model_name, notes_path, desc="single")
+
+    with open(save_path, 'a') as output:
+        if save_raw:
+            output.write(json.dumps(final_object))
+        else:
+            output.write(json.dumps(final_object, indent=2))
+
 def train_n_test(args):
+    """
+    Main training and testing function run from the cli
+    """
     #set up the model specified in args
     model = get_model(args.model_name)
     # get number of exits
@@ -269,14 +394,18 @@ def train_n_test(args):
     load_model(net_trainer.model, best)
 
     #once trained, run it on the test data
-    test(datacoll,net_trainer.model,exits,loss_f,best,notes_path,args)
+    test_single(datacoll,net_trainer.model,exits,loss_f,best,notes_path,args)
     return net_trainer.model,best
 
-"""
-Main function that sorts out the CLI args and runs training and testing function.
-"""
+
 def main():
-    parser = argparse.ArgumentParser(description="Early Exit CLI")
+    """
+    Main function that sorts out the CLI args and runs training and testing function.
+    """
+
+    # this formatter prevents the help text description automatically wrapping to fit in terminal
+    # requires the help text to have manual line breaks
+    parser = argparse.ArgumentParser(description="Early Exit CLI", formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument('-m','--model_name',
             required=True, help='select the model name - see training model')
@@ -287,7 +416,7 @@ def main():
 
     parser.add_argument('-bstr','--batch_size_train',type=int,default=500,
                         help='batch size for the training of the network')
-    parser.add_argument('-bbe','--bb_epochs', metavar='N',type=int, default=1, required=False,
+    parser.add_argument('-bbe','--bb_epochs', metavar='N',type=int, default=0, required=False,
             help='Epochs to train backbone separately, or non ee network')
     parser.add_argument('-jte','--jt_epochs', metavar='n',type=int, default=0, required=False,
             help='epochs to train exits jointly with backbone')
@@ -305,6 +434,12 @@ def main():
     # run notes
     parser.add_argument('-rn', '--run_notes', type=str, required=False,
             help='Some notes to add to the train/test information about the model or otherwise')
+
+    parser.add_argument('-np', '--notes_path', type=path_check, required=False,
+            help='Path to location for notes to be saved')
+    parser.add_argument('-cf','--confidence_function',required=False,nargs='+', type=int,
+            help='Choose which function to be used when determining the confidence of the network at a given exit, pick one or many.\n0 Entropy\n1 Softmax\n2 Trunc Base-2 Softmax\n3 Non-Trunc Base-2 Softmax\n4 Base-2 Sub-Softmax\n')
+
 
     #parser.add_argument('--seed', metavar='N', type=int, default=random.randint(0,2**32-1),
     #    help='Seed for training, NOT CURRENTLY USED')
@@ -329,6 +464,12 @@ def main():
     parser.add_argument('-t1','--top1_threshold', nargs='+',type=float,required=False)
     parser.add_argument('-entr','--entr_threshold', nargs='+',type=float,required=False)
 
+    parser.add_argument('-tr', '--threshold_range', nargs='+', type=float, required=False)
+    parser.add_argument('-ts', '--threshold_step', type=float, required=False)
+
+    parser.add_argument('-sr', '--save_raw', action=argparse.BooleanOptionalAction, default=False, required=False,
+                        help='Save the value of the final activation vector and confidence functions')
+
     # generate onnx graph for the model
     parser.add_argument('-go', '--generate_onnx',metavar='PATH',type=path_check,
                         required=False,
@@ -340,8 +481,7 @@ def main():
 
     # parse the arguments
     args = parser.parse_args()
-
-    if args.trained_model_path is not None and args.bb_epochs==0 and args.jt_epochs==0:
+    if args.trained_model_path is not None and (args.bb_epochs==0 and args.jt_epochs==0):
         model = test_only(args)
         model_path = args.trained_model_path
     else:
@@ -365,3 +505,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
