@@ -25,7 +25,9 @@ dependencies = [
     "numpy==1.19.2",
     "scipy>=1.2.1",
     "matplotlib",
-    "onnx2pytorch"
+    "onnx2pytorch",
+    "pylint",
+    "black"
 ]
 
 [project.optional-dependencies]
@@ -38,10 +40,10 @@ repository = "https://github.com/biggsbenjamin/earlyexitnet"
 # linters
 [tool.black]
 target-version = ['py39']
-line-length = 120
+line-length = 90
 
-[tool.mypy]
-python_version = "3.9"
-no_strict_optional = true
-ignore_missing_imports = true
-check_untyped_defs = true
+#[tool.mypy]
+#python_version = "3.9"
+#no_strict_optional = true
+#ignore_missing_imports = true
+#check_untyped_defs = true
