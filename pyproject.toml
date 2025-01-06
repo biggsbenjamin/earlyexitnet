@@ -10,23 +10,25 @@ authors = [
 ]
 description="A package for training, testing, and exploring early-exit networks in Pytorch & beyond"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "onnx==1.8.1",
+    "onnx>=1.8.1, <2.0.0",
     "protobuf==3.20",
-    "onnxruntime==1.7.0",
-    "onnxoptimizer==0.2.6",
+    "onnxruntime==1.12.0",
+    "onnxoptimizer==0.2.7",
     "torch==1.13.1",
     "torchvision>=0.8.2",
     "onnx-simplifier>=0.3.5",
-    "numpy==1.20",
+    "numpy>=1.21",
     "scipy>=1.2.1",
     "matplotlib",
     "fxpmath",
-    "tqdm"
+    "tqdm",
+    "pylint",
+    "black"
 ]
 
 [project.optional-dependencies]
@@ -39,10 +41,4 @@ repository = "https://github.com/biggsbenjamin/earlyexitnet"
 # linters
 [tool.black]
 target-version = ['py39']
-line-length = 120
-
-[tool.mypy]
-python_version = "3.9"
-no_strict_optional = true
-ignore_missing_imports = true
-check_untyped_defs = true
+line-length = 90
