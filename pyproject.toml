@@ -22,13 +22,15 @@ dependencies = [
     "torch==1.13.1",
     "torchvision>=0.8.2",
     "onnx-simplifier>=0.3.5",
-    "numpy>=1.21",
+    "numpy>=1.26.4, <2.0.0",
     "scipy>=1.2.1",
-    "matplotlib",
+    "scikit-learn>=1.6.0, <2.0.0",
+    "matplotlib>=3.10",
     "fxpmath",
     "tqdm",
     "pylint",
-    "black"
+    "black",
+    "jupyter==1.1.1"
 ]
 
 [project.optional-dependencies]
@@ -40,5 +42,5 @@ repository = "https://github.com/biggsbenjamin/earlyexitnet"
 
 # linters
 [tool.black]
-target-version = ['py39']
+target-version = ['py310']
 line-length = 90
