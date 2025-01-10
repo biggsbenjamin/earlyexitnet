@@ -25,11 +25,13 @@ dependencies = [
     "numpy>=1.26.4, <2.0.0",
     "scipy>=1.2.1",
     "scikit-learn>=1.6.0, <2.0.0",
-    "matplotlib>=3.10",
     "fxpmath",
     "tqdm",
-    "pylint",
+    "pylint>=3.3.3",
+    "mypy>=1.14.1",
     "black",
+    "matplotlib>=3.10",
+    "ipympl==0.9.6",
     "jupyter==1.1.1"
 ]
 
@@ -41,6 +43,9 @@ Homepage = "https://github.com/biggsbenjamin/earlyexitnet"
 repository = "https://github.com/biggsbenjamin/earlyexitnet"
 
 # linters
-[tool.black]
-target-version = ['py310']
-line-length = 90
+[tool.pylint]
+disable = [
+    "no-member", # get rid of dynamic typing issues from torch
+    "invalid-name" # I like my funky var names
+]
+max-line-length = 90
