@@ -1,11 +1,14 @@
+"""
+Helper functions for graphing softmax info.
+"""
+
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import mstats
 from sklearn.neighbors import KernelDensity
 from sklearn import metrics
 from matplotlib.pyplot import cm
-import math
-
 
 def fit_kernel(data, x_vals, kernel="gaussian", bandwidth=None):
     if bandwidth is None:
@@ -94,9 +97,11 @@ def plot_right_wrong(
             ax.axvline(qc, 0, color="green", alpha=quants[i], ls="--")
 
 
-def group_by_class(vals: np.array, correctness=None, classes=None, class_vals=None):
-    """take an array and return a list of lists with values separated by class.
-    By default the class is the argmax, and the values considered are the correctness and the max_value of the array
+def group_by_class(vals: np.ndarray, correctness=None, classes=None, class_vals=None):
+    """
+    take an array and return a list of lists with values separated by class.
+    By default the class is the argmax, and the values considered are the
+    correctness and the max_value of the array
     """
     if class_vals is None:
         class_vals = np.max(vals, -1)
@@ -144,8 +149,8 @@ def make_axes(num_classes: int, **kwargs):
 
 def plot_false_positives(
     x,
-    confidence_layer: np.array,
-    correctness: np.array,
+    confidence_layer: np.ndarray,
+    correctness: np.ndarray,
     label_prefix="",
     normalised=True,
     ax=None,
@@ -184,17 +189,17 @@ def plot_false_positives(
 
 def plot_auroc(
     ax: plt.Axes,
-    threshes: np.array,
-    vals: np.array,
-    correct: np.array,
+    threshes: np.ndarray,
+    vals: np.ndarray,
+    correct: np.ndarray,
     prefix="",
     **kwargs,
 ):
     num_false = np.logical_not(correct).sum()
     num_true = correct.sum()
-    roc = []
+    roc = np.zeros((len(threshes), 3,))
 
-    for thr in threshes:
+    for i, thr in enumerate(threshes):
         estimate = vals > thr
 
         # correctly identified positive values (both true)
@@ -207,11 +212,11 @@ def plot_auroc(
         # false positive rate
         fpr = num_false_positive / num_false
 
-        roc.append([thr, tpr, fpr])
-    roc = np.array(roc)
+        roc[i][0] = thr
+        roc[i][1] = tpr
+        roc[i][2] = fpr
 
     auroc = metrics.auc(roc[:, 2], roc[:, 1])
-
     # fpr vs tpr
     ax.plot(
         roc[:, 2],

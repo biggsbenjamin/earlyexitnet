@@ -1,22 +1,27 @@
+"""
+Comparing behaviour of softmax functions
+"""
+import argparse
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import mstats
-import sys
-import argparse
-from helper.graphs import *
-
-from matplotlib.pyplot import cm
+from earlyexitnet.data_analysis.graphs import *
 
 
-def DOCTOR_softmax_from_softmax(softmax: np.array):
-    # formula from DOCTOR paper
+
+def DOCTOR_softmax_from_softmax(softmax: np.ndarray):
+    """
+    formula from DOCTOR paper
+    """
     g = np.square(softmax).sum(-1)
 
     return g
 
 
-def DOCTOR_softmax_from_raw(raw_layer: np.array):
+def DOCTOR_softmax_from_raw(raw_layer: np.ndarray):
+    """
+    formula from DOCTOR paper but with raw logits as input
+    """
     # exp = np.exp(raw_layer)
     exp = np.power(2, raw_layer)
 
@@ -29,7 +34,11 @@ def DOCTOR_softmax_from_raw(raw_layer: np.array):
     return g
 
 
-def raw_distance(raw_layer: np.array):
+def raw_distance(raw_layer: np.ndarray):
+    """
+    Calculate difference between the max val and the average of the
+    remaining values
+    """
     max_val = raw_layer.max(-1)
     max_ind = raw_layer.argmax(-1)
 
@@ -41,7 +50,11 @@ def raw_distance(raw_layer: np.array):
     return dist
 
 
-def raw_distance_daghero(raw_layer: np.array):
+def raw_distance_daghero(raw_layer: np.ndarray):
+    """
+    Calculate the distance between the max val and the
+    second highest value.
+    """
     sorted_vals = np.sort(raw_layer, axis=-1)
 
     max_val = sorted_vals[:, :, -1]
@@ -50,7 +63,6 @@ def raw_distance_daghero(raw_layer: np.array):
     dist = max_val - second_max
     # breakpoint()
     return dist
-
 
 def main(json_file, funcs=None, plot_classes=False):
     # json_file = "./rawSoftmax_b_lenet_se_singleThresh_2023-07-19_153525.json"
@@ -102,9 +114,11 @@ def main(json_file, funcs=None, plot_classes=False):
     # discern between values that are wrong and right on single exit
     correctness = model_prediction == true_vals
 
-    # construct weighting system where values that are identified as correct earlier are given more weight
+    # construct weighting system where values that are identified as
+    # correct earlier are given more weight
     # for model with 2 exits:
-    # 0 means it was always misclassified, 1 means it was correctly identified at the final exit
+    # 0 means it was always misclassified
+    # 1 means it was correctly identified at the final exit
     # 2 means it was identified correactly at first then misclassified (overthinking)
     # 3 means it was identified correctly both times
     difficulty = None
@@ -205,7 +219,7 @@ def main(json_file, funcs=None, plot_classes=False):
                 fig.suptitle(f"{subt}")
                 fig.set_size_inches(14, 6)
 
-            # don't perform this analysis on the last exit as there is no decision to be made
+            # don't perform this analysis on final exit as there is no decision to be made
             for exit_num, softmax in enumerate(sftmx[:-1]):
                 softmax = np.array(softmax)
                 logbins = np.linspace(0, 1, 100)
@@ -213,8 +227,8 @@ def main(json_file, funcs=None, plot_classes=False):
                     softmax = (1 / np.log(num_classes)) * softmax
                     softmax = 1 - softmax
                 elif "doctor" in name:
-                    softmax = softmax
-                    # automatically enlarge the x axis if doing (1-g)/g instead of only (1-g)
+                    #NOTE weird? softmax = softmax
+                    # automatically enlarge x axis if doing (1-g)/g instead of only (1-g)
                     if max(softmax) > 1 or max(softmax) < 0:
                         logbins = np.linspace(min(softmax), max(softmax), 100)
                 else:
@@ -230,7 +244,8 @@ def main(json_file, funcs=None, plot_classes=False):
                     sft_grouped = group_by_1D(
                         np.stack(
                             (
-                                # consider only those values which are correctly classified by last layer
+                                # consider only those values which are correctly
+                                # classified by last layer
                                 np.array(raw_layer[exit_num])[correctness[-1]].argmax(
                                     -1
                                 ),
@@ -295,7 +310,8 @@ def main(json_file, funcs=None, plot_classes=False):
                     fp_ax = axis[exit_num][1]
                     fp_cost_ax = fp_ax.twinx()
                     # keep only those values that are correct at the next exit
-                    # could be changed to keep only values that are correct at the final exit
+                    # could be changed to keep only values that are
+                    # correct at the final exit
                     relative_correctness = correctness[exit_num][
                         correctness[exit_num + 1]
                     ]
