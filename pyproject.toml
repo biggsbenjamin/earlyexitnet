@@ -49,3 +49,6 @@ disable = [
     "invalid-name" # I like my funky var names
 ]
 max-line-length = 90
+
+[tool.mypy]
+follow_untyped_imports = true
