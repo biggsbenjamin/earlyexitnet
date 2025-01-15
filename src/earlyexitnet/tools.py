@@ -32,6 +32,7 @@ class DataColl:
         self.normalise_train = normalise
         self.num_workers=num_workers
         self.pin_mem=pin_mem
+        print(f'pin memory = {self.pin_mem}')
         #how many equal partitions of the training data for k fold CV, e.g. 5
         self.k_cross_validation = k_cv
         if self.k_cross_validation is not None:
@@ -107,6 +108,7 @@ class DataColl:
                 self.train_set, batch_size=self.batch_size_train,
                 drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers,
                 pin_memory=self.pin_mem)
+
         else:
             if self.train_set is None:
                 self.gen_train()

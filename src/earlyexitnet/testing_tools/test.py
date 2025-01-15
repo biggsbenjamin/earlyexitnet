@@ -454,6 +454,8 @@ class Tester:
         Get the confidence metric statistics for those used during the test.
         If raw data is required, this is provided when save_raw is enabled.
         """
+        if self.exits < 2:
+            return
         for (func,thrs) in self.conf_funcs:
             name_str = str(func.__name__)
             ex_avg = self.tracker_dict[name_str]['exit'].get_avg(return_list=True)
