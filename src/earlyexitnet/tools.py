@@ -22,6 +22,7 @@ class DataColl:
             k_cv=None,
             v_split=None,
             num_workers=1,
+            pin_mem=False, # the nicer thing for others lol
             shuffle=True,
             no_scaling=False
             ):
@@ -30,6 +31,7 @@ class DataColl:
         #bool to normalise training set or not
         self.normalise_train = normalise
         self.num_workers=num_workers
+        self.pin_mem=pin_mem
         #how many equal partitions of the training data for k fold CV, e.g. 5
         self.k_cross_validation = k_cv
         if self.k_cross_validation is not None:
@@ -76,8 +78,9 @@ class DataColl:
             print("WARNING: Normalising data set")
             raise NameError("no normalising till fixed")
             #calc mean and stdev
-            norm_dl = DataLoader(self.full_train_set, batch_size=len(self.full_train_set),
-                    num_workers=self.num_workers)
+            norm_dl = DataLoader(
+                self.full_train_set, batch_size=len(self.full_train_set),
+                num_workers=self.num_workers, pin_memory=self.pin_mem)
             norm_data = next(iter(norm_dl))
             mean = norm_data[0].mean()
             std = norm_data[0].std()
@@ -100,19 +103,24 @@ class DataColl:
         if force: #force will regenerate the dls - new random dist or changing split
             self.gen_train()
             self.valid_dl = None #reset valid dl in case force not called here
-            self.train_dl = DataLoader(self.train_set, batch_size=self.batch_size_train,
-                        drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
+            self.train_dl = DataLoader(
+                self.train_set, batch_size=self.batch_size_train,
+                drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers,
+                pin_memory=self.pin_mem)
         else:
             if self.train_set is None:
                 self.gen_train()
             elif self.train_dl is None:
                 if self.single_split:
-                    self.train_dl = DataLoader(self.train_set, batch_size=self.batch_size_train,
-                            drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
+                    self.train_dl = DataLoader(
+                        self.train_set, batch_size=self.batch_size_train,
+                        drop_last=True, shuffle=self.shuffle,
+                        num_workers=self.num_workers, pin_memory=self.pin_mem)
                 else:
-                    self.train_dl = DataLoader(self.full_train_set, batch_size=self.
-                            batch_size_train,drop_last=True, shuffle=self.shuffle,
-                            num_workers=self.num_workers)
+                    self.train_dl = DataLoader(
+                        self.full_train_set, batch_size=self.batch_size_train,
+                        drop_last=True, shuffle=self.shuffle,
+                        num_workers=self.num_workers,pin_memory=self.pin_mem)
         #returns training set
         return self.train_dl
 
@@ -124,8 +132,10 @@ class DataColl:
         if self.valid_set is None:
             self.gen_valid()
         elif self.valid_dl is None:
-            self.valid_dl = DataLoader(self.valid_set, batch_size=self.batch_size_train,
-                    drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
+            self.valid_dl = DataLoader(
+                self.valid_set, batch_size=self.batch_size_train,
+                drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers,
+                pin_memory=self.pin_mem)
         #returns validation split
         return self.valid_dl
 
@@ -136,8 +146,10 @@ class DataColl:
     def get_test_dl(self):
         self.gen_test() #NOTE only assertion for now
         if self.test_dl is None:
-            self.test_dl = DataLoader(self.full_test_set, batch_size=self.batch_size_test,
-                    drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers)
+            self.test_dl = DataLoader(
+                self.full_test_set, batch_size=self.batch_size_test,
+                drop_last=True, shuffle=self.shuffle, num_workers=self.num_workers,
+                pin_memory=self.pin_mem)
         return self.test_dl
 
 class MNISTDataColl(DataColl):

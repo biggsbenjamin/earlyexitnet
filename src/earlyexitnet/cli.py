@@ -88,8 +88,10 @@ def test_only(args):
     # Device setup
     if torch.cuda.is_available() and args.gpu_target is not None:
         device = torch.device(f"cuda:{args.gpu_target}")
+        pin_mem = True
     else:
         device = torch.device("cpu")
+        pin_mem = False
     print("Device:", device)
 
     load_model(model, args.trained_model_path, device=device)
@@ -106,9 +108,9 @@ def test_only(args):
         return model
     #skip to testing
     if args.dataset == 'mnist':
-        datacoll = MNISTDataColl(batch_size_test=batch_size_test,num_workers=num_workers)
+        datacoll = MNISTDataColl(batch_size_test=batch_size_test,num_workers=num_workers,pin_mem=pin_mem)
     elif args.dataset == 'cifar10':
-        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,num_workers=num_workers, no_scaling=args.no_scaling)
+        datacoll = CIFAR10DataColl(batch_size_test=batch_size_test,num_workers=num_workers, no_scaling=args.no_scaling,pin_mem=pin_mem)
     else:
         raise NameError("Dataset not supported, check name:",
                         args.dataset)
@@ -198,7 +200,7 @@ def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = Fals
         device = torch.device(f"cuda:{args.gpu_target}")
     else:
         device = torch.device("cpu")
-    # print("Device:", device)
+    print(f"Device: {device}, pin memory = {datacoll.pin_mem}" )
 
     if top1_thr is None and entr_thr is None:
         # no thresholds provided, skip testing
@@ -292,8 +294,10 @@ def train_n_test(args):
     # Device setup
     if torch.cuda.is_available() and args.gpu_target is not None:
         device = torch.device(f"cuda:{args.gpu_target}")
+        pin_mem = True
     else:
         device = torch.device("cpu")
+        pin_mem = False
     print("Device:", device)
     num_workers = 1 if args.num_workers is None else args.num_workers
     print(f"Number of workers: {num_workers}")
@@ -312,12 +316,12 @@ def train_n_test(args):
     if args.dataset == 'mnist':
         datacoll = MNISTDataColl(batch_size_train=batch_size_train,
                 batch_size_test=batch_size_test,normalise=normalise,
-                v_split=validation_split,num_workers=num_workers)
+                v_split=validation_split,num_workers=num_workers,pin_mem=pin_mem)
     elif args.dataset == 'cifar10':
         datacoll = CIFAR10DataColl(batch_size_train=batch_size_train,
                 batch_size_test=batch_size_test,normalise=normalise,
                 v_split=validation_split,num_workers=num_workers,
-                no_scaling=args.no_scaling)
+                no_scaling=args.no_scaling,pin_mem=pin_mem)
     else:
         raise NameError("Dataset not supported, check name:",args.dataset)
     train_dl = datacoll.get_train_dl()
