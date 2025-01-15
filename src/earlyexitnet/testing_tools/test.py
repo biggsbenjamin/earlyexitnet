@@ -6,18 +6,13 @@ Includes requires accuracy and loss trackers from tools
 # pytorch imports
 import torch
 from torch import nn#, optim
-from torch.utils.data import DataLoader#, Dataset#, random_split #TensorDataset
-#import torchvision
-#from torchvision import transforms
 
 # general imports
-#import os
 import numpy as np
 #from datetime import datetime as dt
 #from typing import Callable
 #from time import perf_counter
 from tqdm import tqdm
-#import matplotlib.pyplot as plt
 
 # import custom funcions to simulate hardware
 from earlyexitnet.testing_tools import hw_sim
@@ -223,13 +218,13 @@ class Tester:
         # don't actually need each of the vals, just the sums
         # because of the max subtraction
         # mul is done in bitAcc fashion so that's fine to change prec
-
         mm_res = np.less_equal(np.multiply(sum_eToz_arr, thr), 1)
         # boolean array, convert back to torch
-        exit_mask = torch.from_numpy(mm_res.get_val()).to(self.device).gt(0)
+        exit_mask = torch.from_numpy(mm_res.get_val()).to(self.device).gt(0).flatten()
         if not self.save_raw:
             return exit_mask
-        return exit_mask, eToz_arr
+        # eToz_arr is still in fxp format...
+        return exit_mask, torch.from_numpy(eToz_arr.get_val())
 
     def _thr_compare_(self, exit_track, accu_track,
             results, gnd_trth, thrs, thr_func):
