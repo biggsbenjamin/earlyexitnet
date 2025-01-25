@@ -105,6 +105,8 @@ def plot_right_wrong(
     right_col="green",
     wrong_col="red",
     quants=[0.25, 0.5, 0.75],
+    xlabel='threshold value',
+    ylabel='density'
 ):
     """
     Discriminate between the data values that are associated with a correct classification
@@ -126,8 +128,8 @@ def plot_right_wrong(
     )
     plot_hist_kernel(ax, wrong_vals, xax, wrong_col, f"incorrect {wrong_vals.shape[0]}")
 
-    ax.set_xlabel("threshold value")
-    ax.set_ylabel("density")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
 
     if quants is not None:
         quantiles_w = mstats.mquantiles(wrong_vals, prob=quants)
@@ -192,58 +194,129 @@ def make_axes(num_classes: int, **kwargs):
 
 
 def plot_false_positives(
-    x,
+    thresholds,
     confidence_layer: np.ndarray,
     correctness: np.ndarray,
     gt_thr: bool, # dictates the direction of the threshold inequality
     label_prefix="",
     normalised=True,
     ax=None,
-    cax=None,
+    #cax=None,
+    xlabel=''
 ):
+    # y axis values
     exit_perc = []
     fp_rate = []
+    recall_ls = []
+    accuracy_ls = []
+    precision_ls = []
+    fscore_ls = []
+
+    # TODO make this dependent on provided exit number
+    ee_correct_mask = correctness[0]
+    ne_correct_mask = correctness[1]
 
     total_num = len(confidence_layer) if normalised else 1
-    for thr in x:
+
+    for thr in thresholds:
         if gt_thr:
-            exiting_mask = confidence_layer > thr
+            ee_true_mask = confidence_layer > thr
         else:
-            exiting_mask = confidence_layer < thr
-        num_exiting = np.invert(exiting_mask).sum()
+            ee_true_mask = confidence_layer < thr
+
+        # my metrics for confusion
+        true_pos_cnt = np.logical_and(
+            ee_true_mask,
+            np.logical_not(
+                np.logical_and(
+                    np.logical_not(ee_correct_mask),
+                    ne_correct_mask)
+            )
+        ).sum()
+        fp_cnt = np.logical_and(
+            ee_true_mask,
+            np.logical_and(
+                np.logical_not(ee_correct_mask),
+                ne_correct_mask)
+        ).sum()
+        tn_cnt = np.logical_and(
+            np.logical_not(ee_true_mask),
+            np.logical_and(
+                np.logical_not(ee_correct_mask),
+                ne_correct_mask)
+        ).sum()
+        fn_cnt = np.logical_and(
+            np.logical_not(ee_true_mask),
+            np.logical_not(
+                np.logical_and(
+                    np.logical_not(ee_correct_mask),
+                    ne_correct_mask)
+            )
+        ).sum()
+
+        #True +ve rate (recall):         TP/(TP + FN)
+        #Specificity:                    TN/(TN + FP)
+        #False +ve rate (1-specificity): FP/(TN + FP)
+
+        # true positive rate
+        tpr = true_pos_cnt/(true_pos_cnt + fn_cnt)
+        # false positive rate
+        fpr = fp_cnt/(tn_cnt + fp_cnt)
+
         # keep track of how many samples exited at this thresh level
-        exit_perc.append(num_exiting / total_num)
+        exit_perc.append(ee_true_mask.sum() / total_num)
 
         # pick out the values that would exit and see how many are wrong
-        fp_num = np.invert(correctness[exiting_mask]).sum()
-        fp_rate.append(fp_num / total_num)
+        #fp_num = np.invert(correctness[exiting_mask]).sum()
+        #fp_rate.append(fp_cnt / total_num)
+        fp_rate.append(fpr)
+
+        recall = true_pos_cnt/(true_pos_cnt+fn_cnt)
+        accu = (true_pos_cnt + tn_cnt)/total_num
+        if true_pos_cnt + fp_cnt > 0:
+            prec = true_pos_cnt/(true_pos_cnt+fp_cnt)
+        else:
+            prec = 1
+        fm = (2*recall*prec)/(recall+prec)
+
+        recall_ls.append(tpr)
+        accuracy_ls.append(accu)
+        precision_ls.append(prec)
+        fscore_ls.append(fm)
 
     if ax is not None:
-        line1 = ax.plot(x, exit_perc, label=label_prefix + "Exit %", ls="dashed")
-        ax.plot(x, fp_rate, label=label_prefix + "FP", color=line1[0].get_color())
-        ax.set_xlabel("Threshold Value")
-        ax.legend(loc='center left', fontsize="small")
+        # plot false positive rate as func of thr
+        ax.plot(thresholds, fp_rate, label=label_prefix + "FP Rate")
+        ax.plot(thresholds, recall_ls, label=label_prefix + "Recall")
+        ax.plot(thresholds, accuracy_ls, label=label_prefix + "Accuracy")
+        ax.plot(thresholds, precision_ls, label=label_prefix + "Precision")
+        ax.plot(thresholds, fscore_ls, label=label_prefix + "F-Score")
+        # plot exit % as a function of thr
+        line1 = ax.plot(thresholds, exit_perc, label=label_prefix + "Exit %", ls="dashed")
+        # set label and legend
+        ax.set_xlabel(xlabel)
+        ax.legend(fontsize="small")
 
-    if cax is not None:
-        # some fairly arbitrary looking "cost" metric??
-        # false positive rate + scaled percentage of exits
-        # NOTE would make sense if this could be linked to some real HW cost for
-        # the difference between early exiting and not
-        cost = np.array(fp_rate) + 0.1 * np.array(exit_perc)
-        cax.plot(
-            x,
-            cost,
-            label=label_prefix + "Cost:FPR + 0.1(exit%)",
-            ls="dashdot",
-            color=line1[0].get_color() if ax else None,
-        )
-        cax.legend(loc='center right', fontsize="small")
-
+    # NOTE not worth including
+    #if cax is not None:
+    #    # some fairly arbitrary looking "cost" metric??
+    #    # false positive rate + scaled percentage of exits
+    #    # NOTE would make sense if this could be linked to some real HW cost for
+    #    # the difference between early exiting and not
+    #    cost = np.array(fp_rate) + 0.1 * np.array(exit_perc)
+    #    cax.plot(
+    #        x,
+    #        cost,
+    #        label=label_prefix + "Cost:FPR + 0.1(exit%)",
+    #        ls="dashdot",
+    #        color=line1[0].get_color() if ax else None,
+    #    )
+    #    cax.legend(loc='center right', fontsize="small")
 
 def plot_auroc(
     ax: plt.Axes,
     threshes: np.ndarray,
-    vals: np.ndarray,
+    metric_vals: np.ndarray,
     correct: np.ndarray,
     gt_thr: bool, # dictates the direction of the threshold inequality
     prefix="",
@@ -271,28 +344,81 @@ def plot_auroc(
 
     Other useful metrics:
     Precision:  TP/(TP + FP)
+
+    NOTE changing the function of correctness - now it contains all exit
+    results. (ee, fe)
     """
-    # get the number of incorrect classifications
-    num_false = np.logical_not(correct).sum()
-    # get the number of correct classifications
-    num_true = correct.sum()
+    ## get the number of incorrect classifications
+    #num_false = np.logical_not(correct).sum()
+    ## get the number of correct classifications
+    #num_true = correct.sum()
+    # TODO make this dependent on provided exit number
+    ee_correct_mask = correct[0]
+    ne_correct_mask = correct[1]
+
+    # does this determine the number of cats?
+    # no - [threshold, true pos rate, false pos rate]
     roc = np.zeros((len(threshes), 3,))
 
+    # go through each threshold and determine exit state
     for i, thr in enumerate(threshes):
         if gt_thr: # greater than threshold
-            estimate = vals > thr
+            ee_true_mask = metric_vals > thr
         else:
-            estimate = vals < thr
+            ee_true_mask = metric_vals < thr
+        """
+        # last cat you save compute on what will be wrong anyway
+        tp = cat_dict['cat110'].shape[0] + \
+            cat_dict['cat111'].shape[0] + \
+            cat_dict['cat100'].shape[0]
 
-        # correctly identified positive values (both true)
-        num_correct = np.logical_and(estimate, correct).sum()
+        fp = cat_dict['cat101'].shape[0]
+        tn = cat_dict['cat001'].shape[0]
+
+        # last cat you save compute on what will be wrong anyway
+        fn = cat_dict['cat011'].shape[0] + \
+            cat_dict['cat010'].shape[0] + \
+            cat_dict['cat000'].shape[0]
+        """
+
+        true_pos_cnt = np.logical_and(
+            ee_true_mask,
+            np.logical_not(
+                np.logical_and(
+                    np.logical_not(ee_correct_mask),
+                    ne_correct_mask)
+            )
+        ).sum()
+        fp_cnt = np.logical_and(
+            ee_true_mask,
+            np.logical_and(
+                np.logical_not(ee_correct_mask),
+                ne_correct_mask)
+        ).sum()
+        tn_cnt = np.logical_and(
+            np.logical_not(ee_true_mask),
+            np.logical_and(
+                np.logical_not(ee_correct_mask),
+                ne_correct_mask)
+        ).sum()
+        fn_cnt = np.logical_and(
+            np.logical_not(ee_true_mask),
+            np.logical_not(
+                np.logical_and(
+                    np.logical_not(ee_correct_mask),
+                    ne_correct_mask)
+            )
+        ).sum()
+
+        #True +ve rate (recall):         TP/(TP + FN)
+        #Specificity:                    TN/(TN + FP)
+        #False +ve rate (1-specificity): FP/(TN + FP)
+
         # true positive rate
-        tpr = num_correct / num_true
+        tpr = true_pos_cnt/(true_pos_cnt + fn_cnt)
 
-        # false positive (true in estimate, false in correct)
-        num_false_positive = np.logical_and(estimate, np.logical_not(correct)).sum()
         # false positive rate
-        fpr = num_false_positive / num_false
+        fpr = fp_cnt/(tn_cnt + fp_cnt)
 
         roc[i][0] = thr
         roc[i][1] = tpr

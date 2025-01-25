@@ -74,24 +74,24 @@ def main(json_file, funcs=None, plot_classes=False):
     # get the raw softmax from the thr_max_softmax confidence metric
     pt_softmax_values = data["conf_metrics"]["_thr_max_softmax"]["raw_softmax"]
 
-    # if pt_softmax_values is not None:
-    doctor_sft = DOCTOR_softmax_from_softmax(np.array(pt_softmax_values))
-    # add the DOCTOR stats for the softmax values to the metrics dictionary
-    data["conf_metrics"]["_thr_"+"DOCTOR_distance_softmax"] = {"raw_softmax":doctor_sft}
+    ## if pt_softmax_values is not None:
+    #doctor_sft = DOCTOR_softmax_from_softmax(np.array(pt_softmax_values))
+    ## add the DOCTOR stats for the softmax values to the metrics dictionary
+    #data["conf_metrics"]["_thr_"+"DOCTOR_distance_softmax"] = {"raw_softmax":doctor_sft}
 
-    doctor_raw = DOCTOR_softmax_from_raw(np.array(raw_layer))
-    # add the DOCTOR stats for the raw layer values to the metrics dictionary
-    data["conf_metrics"]["_thr_"+"DOCTOR_distance_raw"] = {"raw_softmax":doctor_raw}
+    #doctor_raw = DOCTOR_softmax_from_raw(np.array(raw_layer))
+    ## add the DOCTOR stats for the raw layer values to the metrics dictionary
+    #data["conf_metrics"]["_thr_"+"DOCTOR_distance_raw"] = {"raw_softmax":doctor_raw}
 
-    # custom_func = raw_distance(np.array(raw_layer))
-    # data['conf_metrics'].append({
-    #   'name':"doctor distance between max and avg",
-    #   'raw_softmax':custom_func
-    # })
+    ## custom_func = raw_distance(np.array(raw_layer))
+    ## data['conf_metrics'].append({
+    ##   'name':"doctor distance between max and avg",
+    ##   'raw_softmax':custom_func
+    ## })
 
-    # generate the doctor curve for distance between top 2 values
-    custom_func = raw_distance_daghero(np.array(pt_softmax_values))
-    data["conf_metrics"]["_thr_"+"DOCTOR_dist_top2_softmax"] = {"raw_softmax":custom_func}
+    ## generate the doctor curve for distance between top 2 values
+    #custom_func = raw_distance_daghero(np.array(pt_softmax_values))
+    #data["conf_metrics"]["_thr_"+"DOCTOR_dist_top2_softmax"] = {"raw_softmax":custom_func}
 
     # get some constants from the json
     num_exits = data["num_exits"]
@@ -104,6 +104,7 @@ def main(json_file, funcs=None, plot_classes=False):
     model_prediction = np.argmax(raw_layer, -1) # [num_exits, num_samples, num_classes]
 
     # generate bool mask for each exit based on if prediction matches ground truth
+    # for all exits
     correctness = model_prediction == true_vals
 
     # construct weighting system where values that are identified as
@@ -125,7 +126,7 @@ def main(json_file, funcs=None, plot_classes=False):
     max_vals = np.max(raw_layer, -1)
     # these are the maxima of the logit values, raw final layer values of chosen class
 
-    fig1, axis1 = plt.subplots(nrows=num_exits, sharex=True)
+    fig1, axis1 = plt.subplots(nrows=num_exits, sharex=True, sharey=True)
     fig1.suptitle(f"{title_name} Raw value distribution")
 
     for e_idx, e_exit in enumerate(max_vals):
@@ -147,7 +148,7 @@ def main(json_file, funcs=None, plot_classes=False):
 
         ax.set_title(f"exit {e_idx}")
         ax.legend(loc="upper left")
-    fig1.set_size_inches(20,10)
+    fig1.set_size_inches(20,8*num_exits)
     fig1.tight_layout()
 
     # grouping the raw final layer values by their index (aka their class)
@@ -215,37 +216,68 @@ def main(json_file, funcs=None, plot_classes=False):
 
     print("Running analysis on different confidence functions")
     # ANALYSE VARIOUS SOFTMAX FUNCTIONS
-    for idx, function in enumerate(data["conf_metrics"].keys()):
-        name = function[5:]
-        print(f"Confidence function {idx}: {name}")
-        # NOTE temporarily removing conf met selection
-        #if funcs is None or idx in funcs: # None defaults to do them all
-        sftmx = data["conf_metrics"][function]["raw_softmax"]
 
-        subt = f"[{title_name}] ({name})"
+    # Note - changing order of loops
+    # don't perform this analysis on final exit as there is no decision to be made
+    for exit_num in range(int(data['num_exits'])-1):
+        # set up the conf metrics as subplots for each exit
         if not plot_classes:
             fig, axis = plt.subplots(
-                ncols=2, nrows=num_exits - 1, squeeze=False, layout="constrained"
+                ncols=2,
+                # FIXME ignoring base4 - no time
+                nrows=len(data["conf_metrics"])-2, # number of metrics to look at
+                squeeze=False, layout="constrained",
+                #sharey=True
             )
-            fig.suptitle(f"{subt}")
-            fig.set_size_inches(20, 8)
+            #fig.suptitle(f"Exit {exit_num} confidence metric plots")
+            fig.set_size_inches(20, 8*len(data["conf_metrics"]))
 
-        # don't perform this analysis on final exit as there is no decision to be made
-        for exit_num, raw_norm in enumerate(sftmx[:-1]):
-            raw_norm = np.array(raw_norm)
+
+        for conf_idx, function in enumerate(data["conf_metrics"].keys()):
+            if 'base4' in function:
+                # skipping these, not enough time
+                continue
+            name = function[5:]
+            print(f"Confidence function {conf_idx}: {name}")
+
+            # NOTE temporarily removing conf met selection
+            #if funcs is None or idx in funcs: # None defaults to do them all
+            raw_norm = np.array(data["conf_metrics"][function]["raw_softmax"][exit_num])
+
+            # define subplot title
+            ax_t = f"[{title_name}] Exit: {exit_num} Metric: {name}"
+            # axis for the split plots for each confidence metric (lhs)
+            lhs_ax = axis[conf_idx][0]
+            # axis for plotting the confusing fps curve (rhs)
+            rhs_ax = axis[conf_idx][1]
+            rhs_ax.set_title("false +ve rate, exit percentage, recall, accu, preci, f-score")
+
             # this sets up an x axis limited to between 0,1
             # makes sense for the softmax variants...
             # BUT NOT for entropy or the subtract version
             logbins = np.linspace(0, 1, 100)
             auroc_thresholds = None
             gt_inequality_bool = None
+            norm_proc_norm = None
+            norm_logbins = None
             if "entropy" in function.lower():
-                # I think this old code actually does the entropy calc
-                # BUT my version already does it
-                #raw_norm = (1 / np.log(num_classes)) * raw_norm
-                #raw_norm = 1 - raw_norm
+                # raw_norm values are the calculated entropy values of
+                # the logits, passed through softmax
+                # NOTE these apply to auroc and maybe fp plots?
                 proc_norm = raw_norm
                 logbins = np.linspace(0, max(raw_norm), 100)
+
+                # my plan is to transform the values that arent sftmax into
+                # something that is between 0 and 1 so that the plots
+                # can be more easily compared to the softmax-based metrics
+                # this SHOULD NOT affect shape
+                # these should apply plots r/w and diffi
+                scaled_entr = np.divide(raw_norm, raw_norm.max())
+
+                norm_proc_norm = np.add(np.multiply(scaled_entr, -1), 1)
+                norm_logbins = np.linspace(0, 1, 100)
+
+                # apply wherever they are used
                 auroc_thresholds = np.linspace(max(raw_norm), 0, 200)
                 gt_inequality_bool = False
             elif "sub" in function.lower():
@@ -254,9 +286,16 @@ def main(json_file, funcs=None, plot_classes=False):
                 # need to use the sum instead I think?
                 # since the threshold is 1 > thr * sum
                 proc_norm = np.sum(raw_norm, axis=-1)
-                logbins = np.linspace(0, max(proc_norm), 100)
-                auroc_thresholds = np.linspace(max(proc_norm), 0, 200)
-                gt_inequality_bool = False
+                #scaled_sum = np.divide(proc_norm, proc_norm.max())
+                #norm_proc_norm = np.add(np.multiply(scaled_sum, -1), 1)
+                proc_norm = 1 / proc_norm
+
+                #logbins = np.linspace(0, max(proc_norm), 100)
+                logbins = np.linspace(0, 1, 100)
+
+                #auroc_thresholds = np.linspace(max(proc_norm), 0, 200)
+                auroc_thresholds = None
+                gt_inequality_bool = True
             elif "doctor" in function.lower():
                 print(f"Found the Doctor! {name}")
                 proc_norm = raw_norm
@@ -266,14 +305,93 @@ def main(json_file, funcs=None, plot_classes=False):
             else:
                 proc_norm = np.max(raw_norm, -1)
 
-            ### TODO separate this out bcos long ting ###
-            if plot_classes:
+            if not plot_classes:
+                if auroc_thresholds is None:
+                    # auroc thresholds for the top1 style conf metrics
+                    auroc_thresholds = np.linspace(0, 1, 200)
+                if gt_inequality_bool is None:
+                    # the inequality direction for the top1 style conf metrics
+                    gt_inequality_bool = True
+
+                # actually plot the metric
+                plot_auroc(
+                    auroc_ax,
+                    auroc_thresholds,
+                    proc_norm,
+                    #correctness[exit_num], # the correct values @ curr exit
+                    correctness, # USING ALL exit gnd truth vals
+                    gt_thr=gt_inequality_bool,
+                    prefix=f"{name} ",
+                )
+                auroc_ax.legend()
+
+                # plot the distr of correct and incorrect values
+                # also plot some quantiles
+                #if "sub" in function.lower() or "entropy" in function.lower():
+                if "entropy" in function.lower():
+                    # sub and entropy turned around and shrunk to 0-1 scale
+                    rw_vals = norm_proc_norm
+                    bin_vals = norm_logbins
+                    xlabel='normalised threshold value'
+                else:
+                    rw_vals = proc_norm
+                    bin_vals = logbins
+                    xlabel='threshold value'
+                # plot the distr of correct and incorrect values
+                # also plot some quantiles
+                plot_right_wrong(
+                    lhs_ax, rw_vals, correctness[exit_num], bin_vals, xlabel=xlabel)
+                # On the same plot.
+                # plot the distr of samples corresponding to difficulty
+                plot_difficulties(
+                    lhs_ax, difficulty,
+                    rw_vals, bin_vals,
+                    density=True, difficulties=difficulties)
+
+                # set lhs plot title and enable legends
+                lhs_ax.set_title(ax_t)
+                lhs_ax.legend()
+
+                # copy rhs ax
+                #fp_cost_ax = rhs_ax.twinx()
+
+                # keep only those values that are correct at the next exit
+                # could be changed to keep only values that are
+                # correct at the final exit
+                #relative_correctness = correctness[exit_num][
+                #    correctness[exit_num + 1]
+                #]
+                # NOTE relative_correctness not used?
+
+                plot_false_positives(
+                    bin_vals,
+                    rw_vals,
+                    correctness, # if the MODEL predicts the correct classif
+                    gt_thr=True,
+                    ax=rhs_ax,
+                    normalised=True,
+                    #cax=fp_cost_ax,
+                    xlabel=xlabel
+                )
+
+                # NOTE overly complicated plot...
+                #plot_false_positives(
+                #    logbins,
+                #    proc_norm,
+                #    correctness[exit_num],
+                #    ax=fps_ax,
+                #    label_prefix=name + " ",
+                #    cax=fps_cost_ax,
+                #)
+
+            else:
+                ### TODO separate this out bcos long ting ###
                 fig1, _ = make_axes(num_classes, layout="constrained")
                 fig2, _ = make_axes(num_classes, layout="constrained")
                 fig3, ax3 = plt.subplots()
-                fig1.suptitle(f"{subt} Exit {exit_num} Distribution")
-                fig2.suptitle(f"{subt} Exit {exit_num} Cost")
-                fig3.suptitle(f"{subt} Exit {exit_num} Combined")
+                fig1.suptitle(f"{ax_t} Exit {exit_num} Distribution")
+                fig2.suptitle(f"{ax_t} Exit {exit_num} Cost")
+                fig3.suptitle(f"{ax_t} Exit {exit_num} Combined")
                 sft_grouped = group_by_1D(
                     np.stack(
                         (
@@ -324,71 +442,17 @@ def main(json_file, funcs=None, plot_classes=False):
                     fig1.axes[i].set_title(f"{i}")
                     fig2.axes[i].set_title(f"{i}")
             ### TODO separate this out bcos long ting ###
-            else:
-                if auroc_thresholds is None:
-                    # auroc thresholds for the top1 style conf metrics
-                    auroc_thresholds = np.linspace(0, 1, 200)
-                if gt_inequality_bool is None:
-                    # the inequality direction for the top1 style conf metrics
-                    gt_inequality_bool = True
-                plot_auroc(
-                    auroc_ax,
-                    auroc_thresholds,
-                    proc_norm,
-                    correctness[exit_num],
-                    gt_thr=gt_inequality_bool,
-                    prefix=f"{name} ",
-                )
-                auroc_ax.legend()
-                # axis for the split plots for each confidence metric (lhs)
-                ax = axis[exit_num][0]
-                plot_right_wrong(ax, proc_norm, correctness[exit_num], logbins)
-                plot_difficulties(
-                    ax,
-                    difficulty,
-                    proc_norm,
-                    logbins,
-                    density=True,
-                    difficulties=difficulties,
-                )
 
-                # axis for plotting the confusing fps curve (rhs)
-                fp_ax = axis[exit_num][1]
-                fp_cost_ax = fp_ax.twinx()
+        if not plot_classes:
+            # set up lhs shared y axis
+            for ax in axis[:,0]:
+                ax.sharey(axis[0][0])
+                ax.autoscale()
 
-                # keep only those values that are correct at the next exit
-                # could be changed to keep only values that are
-                # correct at the final exit
-                #relative_correctness = correctness[exit_num][
-                #    correctness[exit_num + 1]
-                #]
-                # NOTE relative_correctness not used?
-
-                plot_false_positives(
-                    logbins,
-                    proc_norm,
-                    correctness[exit_num], # just if the MODEL predicts the correct classif
-                    gt_thr=gt_inequality_bool,
-                    ax=fp_ax,
-                    normalised=True,
-                    cax=fp_cost_ax,
-                )
-
-                # NOTE overly complicated plot...
-                #plot_false_positives(
-                #    logbins,
-                #    proc_norm,
-                #    correctness[exit_num],
-                #    ax=fps_ax,
-                #    label_prefix=name + " ",
-                #    cax=fps_cost_ax,
-                #)
-
-                ax.set_title(f"exit {exit_num}")
-                ax.legend()
     # fig5 idk what it is really
     #fig5.set_size_inches(20,8)
     #fig5.tight_layout()
+
     # fig9 is the AUROC plot - TODO still checking if its the one I want
     fig9.set_size_inches(12,12)
     fig9.tight_layout()

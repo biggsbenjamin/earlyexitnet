@@ -28,6 +28,12 @@ class Tester:
         loss_f=nn.CrossEntropyLoss(),
         exits=2,
         top1acc_thresholds=[],
+        fast_thresholds=None,
+        fast_noTrunc_thresholds=None,
+        fast_sub_thresholds=None,
+        fast_sub_bitAcc_thresholds=None,
+        fast_base4_threholds=None,
+        fast_base4_sub_threholds=None,
         entropy_thresholds=[],
         conf_funcs=None,
         device=None,
@@ -43,23 +49,27 @@ class Tester:
         #self.top1acc_thresholds = top1acc_thresholds
         #self.entropy_thresholds = entropy_thresholds
         self.thrs = [
-                entropy_thresholds,
-                top1acc_thresholds,
-                top1acc_thresholds,
-                top1acc_thresholds,
-                top1acc_thresholds,
-                top1acc_thresholds,
-                ]
+            entropy_thresholds,
+            top1acc_thresholds,
+            fast_thresholds if fast_thresholds is not None else top1acc_thresholds,
+            fast_noTrunc_thresholds if fast_noTrunc_thresholds is not None else top1acc_thresholds,
+            fast_sub_thresholds if fast_sub_thresholds is not None else top1acc_thresholds,
+            fast_sub_bitAcc_thresholds if fast_sub_bitAcc_thresholds is not None else top1acc_thresholds,
+            #fast_base4_threholds if fast_base4_threholds is not None else top1acc_thresholds,
+            #fast_base4_sub_threholds if fast_base4_sub_threholds is not None else fast_sub_thresholds,
+            ]
 
         # list of AVAILABLE conf threshold methods
         self.conf_list = [
-                self._thr_entropy,
-                self._thr_max_softmax,
-                self._thr_max_softmax_fast,
-                self._thr_max_softmax_fast_noTrunc,
-                self._thr_max_softmax_fast_sub,
-                self._thr_max_softmax_fast_sub_bitAcc
-            ]
+            self._thr_entropy,
+            self._thr_max_softmax,
+            self._thr_max_softmax_fast,
+            self._thr_max_softmax_fast_noTrunc,
+            self._thr_max_softmax_fast_sub,
+            self._thr_max_softmax_fast_sub_bitAcc,
+            #self._thr_max_softmax_fast_base4,
+            #self._thr_max_softmax_fast_base4_sub
+        ]
 
         # select functions chosen during cli
         if conf_funcs is None:
@@ -225,6 +235,54 @@ class Tester:
             return exit_mask
         # eToz_arr is still in fxp format...
         return exit_mask, torch.from_numpy(eToz_arr.get_val())
+
+    def _thr_max_softmax_fast_base4(self, exit_results, thr):
+        # max softmax function but with base 4 usage
+        # 4 to power of truncated logit values - integer component
+        pow4 = torch.pow(4, torch.trunc(exit_results))
+        # normalise exp wrt sum of exp
+        pow4_max = pow4.div(pow4.sum(dim=-1).unsqueeze(1))
+        # get max for each result in batch
+        sftmx_max = torch.max(pow4_max, dim=-1).values
+        # comparing to threshold to get boolean tensor mask for exit
+        exit_mask = sftmx_max.gt(thr)
+        if not self.save_raw:
+            return exit_mask
+        return exit_mask, pow4_max
+
+    def _thr_max_softmax_fast_base4_sub(self, exit_results, thr):
+        # TODO make these variables:
+        # Input fixed datatype
+        #IN_FRAC_W = 8
+        #IN_INT_W = 8
+        #IN_TOT_W = IN_INT_W + IN_FRAC_W
+        # Internal accumulation datatype
+        #ACCUM_INT_W = 1
+        ACCUM_FRAC_W = 28
+        #ACCUM_TOT_W = ACCUM_INT_W + ACCUM_FRAC_W
+
+        # find max value - not affected by precision (in a meaningful way)
+        batch_max = torch.max(exit_results, dim=-1).values
+        # subtract max from each value
+        # take integer component of results
+        # negate (on hw this is NOT and +1)
+        subs = -torch.trunc(exit_results - batch_max.unsqueeze(1))
+        # IF negate > num of frac bits
+        nzero_mask = subs.lt(ACCUM_FRAC_W) # true value is not shifted
+        shifters = torch.zeros(subs.shape, device=self.device)
+            # THEN
+                # result is too small to care, 2^val = 0
+            # ELSE:
+                # take 1.0...0 bitacc val and shift right by negation result
+        # NOTE can't do bitwise shift for floats, do division instead lol
+        shifters[nzero_mask] = 1.0
+        shifters[nzero_mask] = shifters[nzero_mask].div(torch.pow(4, subs[nzero_mask]))
+        # sum the values
+        # exit IF 1 > sum * thr
+        exit_mask = shifters.sum(dim=-1).mul(thr).le(1)
+        if not self.save_raw:
+            return exit_mask
+        return exit_mask, shifters
 
     def _thr_compare_(self, exit_track, accu_track,
             results, gnd_trth, thrs, thr_func):
