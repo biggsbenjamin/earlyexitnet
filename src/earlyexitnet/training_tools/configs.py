@@ -21,6 +21,8 @@ def select_optimiser(opt_str):
         opt_cfg = OptSGDPlateauSched()
     elif opt_str == 'adam-wd-plat-sched':
         opt_cfg=OptAdamWDPlatSched()
+    elif opt_str == 'adam-wd-cos-sched':
+        opt_cfg=OptAdamWDCosineSched()
     else:
         raise NotImplementedError(f"Optimiser config:{opt_str} not implement.")
     return opt_cfg
@@ -54,7 +56,8 @@ class OptBranchyNetAdam(OptConfig):
 class OptAdamWeightDecay(OptBranchyNetAdam):
     name: str ='adam-wd'
     lr: float = 0.00094
-    weight_decay: float =0.00011
+    #weight_decay: float =0.00011
+    weight_decay: float =0.0005
 
     def get_opt(self,params):
         opt = self.opt_class(params,lr=self.lr,
@@ -71,13 +74,15 @@ class OptAdamWDMulSched(OptAdamWeightDecay):
 
     lr_sched_class: Any =optim.lr_scheduler.MultiplicativeLR
     lr_lambda: Any =lambda epoch:0.99
-    verbose: bool =True
+    #verbose: bool =True
 
     def get_opt(self,params):
         opt = self.opt_class(params,lr=self.lr,
                 betas=self.betas,
                 weight_decay=self.weight_decay)
-        lr_sched = self.lr_sched_class(opt,lr_lambda=lr_lambda,verbose=self.verbose)
+        lr_sched = self.lr_sched_class(opt,lr_lambda=self.lr_lambda,
+                #verbose=self.verbose
+                )
         return opt, lr_sched
 
 @dataclass
@@ -90,7 +95,7 @@ class OptAdamWDPlatSched(OptAdamWeightDecay):
     patience: int =3
     threshold: float=0.001
     mode: str ='max'
-    verbose: bool =True
+    #verbose: bool =True
 
     def get_opt(self,params):
         opt = self.opt_class(params,lr=self.lr,
@@ -101,7 +106,8 @@ class OptAdamWDPlatSched(OptAdamWeightDecay):
                 patience=self.patience,
                 threshold=self.threshold,
                 mode=self.mode,
-                verbose=self.verbose)
+                #verbose=self.verbose
+                )
         return opt, lr_sched
 
 # NOTE taken from resnet18 cifar 10 configuration:
@@ -120,7 +126,7 @@ class OptSGDPlateauSched(OptConfig):
     patience: int =3
     threshold: float=0.001
     mode: str ='max'
-    verbose: bool =True
+    #verbose: bool =True
 
     def get_opt(self,params):
         opt = self.opt_class(params,lr=self.lr,
@@ -133,6 +139,38 @@ class OptSGDPlateauSched(OptConfig):
                 patience=self.patience,
                 threshold=self.threshold,
                 mode=self.mode,
-                verbose=self.verbose)
+                #verbose=self.verbose
+                )
         return opt, lr_sched
 
+#elif opt_str == 'adam-wd-cos-sched':
+#    opt_cfg=OptAdamWDCosineSched()
+
+@dataclass
+class OptAdamWDCosineSched(OptAdamWeightDecay):
+    name: str ='adam-wd-cos-sched'
+    lr: float = 0.00135
+    weight_decay: float =0.00007
+
+    lr_sched_class: Any =optim.lr_scheduler.CosineAnnealingWarmRestarts
+    #T_0 - iters till 1st restart
+    #T_mult - factor to next restart, so if t0 is 100 and tmult is 1.5
+        # NOTE I THINK t1 is 150
+    #eta_min - minimum lr
+    #last_epoch - idx of last epoch
+    t0: int = 100
+    tmult: int = 2 # has to be an integer???
+
+    def get_opt(self,params):
+        opt = self.opt_class(
+                params,
+                lr=self.lr,
+                betas=self.betas,
+                weight_decay=self.weight_decay
+                )
+        lr_sched = self.lr_sched_class(
+                opt,
+                T_0=self.t0,
+                T_mult=self.tmult
+                )
+        return opt, lr_sched

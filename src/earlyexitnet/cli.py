@@ -229,8 +229,6 @@ def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = Fals
     stop = perf_counter()
     elapsed_time = stop-start
 
-    if exits < 2:
-        return elapsed_time, None
     return elapsed_time, net_test.get_stats()
 
 def test_single(datacoll,model,exits,loss_f,notes_path,args):
@@ -458,7 +456,7 @@ def main():
             required=False, default='mnist',
             help='select the dataset, default is mnist')
     parser.add_argument('--no_scaling',action='store_true',
-                        help='Prevents datqa being scaled to between 0,1')
+                        help='Prevents data being scaled to between 0,1')
 
     # choose the cuda device to target
     parser.add_argument('-gpu','--gpu_target',type=int,required=False,

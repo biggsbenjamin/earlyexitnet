@@ -171,13 +171,19 @@ class CIFAR10DataColl(DataColl):
         #child version of function, CIFAR10 specific
         #transform for CIFAR10 training
         tfs_list = [transforms.ToTensor()]
+        # multiply values by 255
         custom_trfm = transforms.Lambda(lambda x: x*255)
         mean=(0.4913997551666284, 0.48215855929893703, 0.4465309133731618)
         std=(0.24703225141799082, 0.24348516474564, 0.26158783926049628)
+        # FIXME is the scaling the *255? work out if this is true
+        # confusing myself with double negatives, value is default False
+        # no_scaling defaults to true in cli, when TRUE the values are
+        # NOT SCALED DOWN to between 0,1
         if self.no_scaling:
             tfs_list.append(custom_trfm)
             mean=(0.4913997551666284*255, 0.48215855929893703*255, 0.4465309133731618*255)
             std=(0.24703225141799082*15.968719, 0.24348516474564*15.968719, 0.26158783926049628*15.968719)
+
         tfs_list = tfs_list + [transforms.RandomHorizontalFlip(),
                 transforms.RandomRotation(degrees=10),
                 transforms.ColorJitter(brightness=0.5),
@@ -188,6 +194,7 @@ class CIFAR10DataColl(DataColl):
         self.full_train_set = torchvision.datasets.CIFAR10('../data/cifar10',
             download=True, train=True, transform=self.tfs_train)
 
+        # test data set
         tfs_test_list = [transforms.ToTensor()]
         if self.no_scaling:
             tfs_test_list.append(custom_trfm)
