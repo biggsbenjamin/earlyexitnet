@@ -129,13 +129,16 @@ def main(json_file, funcs=None, plot_classes=False):
     fig1, axis1 = plt.subplots(nrows=num_exits, sharex=True, sharey=True)
     fig1.suptitle(f"{title_name} Raw value distribution")
 
+    maxmax_val = max_vals.max()
+    minmax_val = max_vals.min()
+
     for e_idx, e_exit in enumerate(max_vals):
         ax = axis1[e_idx]
 
         # set up x axis histogram bins
-        max_val = max(e_exit)
-        min_val = min(e_exit)
-        bins = 100
+        max_val = maxmax_val#max(e_exit)
+        min_val = minmax_val#min(e_exit)
+        bins = 200
         x = np.linspace(min_val, max_val, bins)
 
         # see graphs.py for more info

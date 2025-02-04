@@ -32,7 +32,9 @@ dependencies = [
     "black",
     "matplotlib>=3.10",
     "ipympl==0.9.6",
-    "jupyter==1.1.1"
+    "jupyter==1.1.1",
+    "pandas==2.2.3"
+
 ]
 
 [project.optional-dependencies]

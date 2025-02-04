@@ -76,7 +76,6 @@ def plot_difficulties(ax, difficulty, layer, bins, difficulties=None, density=Fa
             fit_kernel(extracted_val, bins, bandwidth=(max_val - min_val) / 30),
             color=colours[i],
         )
-
     ax.hist(
         vals,
         bins=bins,
