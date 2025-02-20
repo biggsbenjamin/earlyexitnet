@@ -454,6 +454,10 @@ class Tester:
         Get the confidence metric statistics for those used during the test.
         If raw data is required, this is provided when save_raw is enabled.
         """
+        if self.exits < 2:
+            self.stats_dict = {'single_exit_test_accuracy' : self.accu_track_totl.get_accu(
+                return_list=True)}
+            return self.stats_dict
         for (func,thrs) in self.conf_funcs:
             name_str = str(func.__name__)
             ex_avg = self.tracker_dict[name_str]['exit'].get_avg(return_list=True)

@@ -91,7 +91,7 @@ class ResNet8(nn.Module):
         self.end_layers = nn.Sequential(*end_layers)
         self.wb_list.append(l0)
 
-        print("w&b layer len",len(self.wb_list))
+        #print("w&b layer len",len(self.wb_list))
 
     def _build_backbone(self):
         for ic,oc,s in \

@@ -49,6 +49,7 @@ def get_exits(model_str):
 
 def get_save_path(model_name, notes_path, timestamp=True, desc=None, show=True, filetype='json'):
     save_path = model_name
+    nope = os.path.split(notes_path)[0]
     if desc is not None:
         save_path += f"_{desc}"
     if timestamp:
@@ -57,7 +58,7 @@ def get_save_path(model_name, notes_path, timestamp=True, desc=None, show=True, 
 
     save_path += f'.{filetype}'
 
-    save_path = os.path.join(notes_path,save_path)
+    save_path = os.path.join(nope,save_path)
     #if show:
     print("Storing the test results at", save_path)
     return save_path
@@ -202,7 +203,7 @@ def run_test(datacoll,model,exits,top1_thr,entr_thr,loss_f,args, save_raw = Fals
         device = torch.device("cpu")
     print(f"Device: {device}, pin memory = {datacoll.pin_mem}" )
 
-    if top1_thr is None and entr_thr is None:
+    if top1_thr is None and entr_thr is None and exits > 2:
         # no thresholds provided, skip testing
         print("WARNING: No Thresholds provided, skipping testing.")
         return
@@ -251,7 +252,8 @@ def test_single(datacoll,model,exits,loss_f,notes_path,args):
 
     ts = dt.now().strftime("%Y-%m-%d_%H%M%S")
     if not save_raw: # when saving raw output, txt file doesn't make sense
-        with open(get_save_path("test", notes_path, filetype='txt', timestamp=False), 'a') as notes:
+        with open(get_save_path("test_notes", notes_path, filetype='txt', timestamp=False), 'a') as notes:
+        #with open(notes_path, 'a') as notes:
             notes.write("\n#######################################\n")
             notes.write(f"\nTesting results: for {args.model_name} @ {ts} ")
             notes.write(f"on dataset {args.dataset}:\n")
@@ -271,7 +273,7 @@ def test_single(datacoll,model,exits,loss_f,notes_path,args):
 
     final_object["test_vals"] = test_stats
 
-    save_path = get_save_path(args.model_name, notes_path, desc="single")
+    save_path = get_save_path(args.model_name, os.path.split(notes_path)[0], desc="single")
 
     with open(save_path, 'a') as output:
         if save_raw:
@@ -316,12 +318,13 @@ def train_n_test(args):
     if args.dataset == 'mnist':
         datacoll = MNISTDataColl(batch_size_train=batch_size_train,
                 batch_size_test=batch_size_test,normalise=normalise,
-                v_split=validation_split,num_workers=num_workers,pin_mem=pin_mem)
+                v_split=validation_split,num_workers=num_workers,
+                pin_mem=pin_mem)
     elif args.dataset == 'cifar10':
         datacoll = CIFAR10DataColl(batch_size_train=batch_size_train,
                 batch_size_test=batch_size_test,normalise=normalise,
                 v_split=validation_split,num_workers=num_workers,
-                no_scaling=args.no_scaling,pin_mem=pin_mem)
+                pin_mem=pin_mem,no_scaling=args.no_scaling)
     else:
         raise NameError("Dataset not supported, check name:",args.dataset)
     train_dl = datacoll.get_train_dl()
@@ -398,7 +401,7 @@ def train_n_test(args):
     load_model(net_trainer.model, best)
 
     #once trained, run it on the test data
-    test_single(datacoll,net_trainer.model,exits,loss_f,best,notes_path,args)
+    test_single(datacoll,net_trainer.model,exits,loss_f,notes_path,args)
     return net_trainer.model,best
 
 
@@ -453,7 +456,7 @@ def main():
             required=False, default='mnist',
             help='select the dataset, default is mnist')
     parser.add_argument('--no_scaling',action='store_true',
-                        help='Prevents datqa being scaled to between 0,1')
+                        help='Prevents data being scaled to between 0,1')
 
     # choose the cuda device to target
     parser.add_argument('-gpu','--gpu_target',type=int,required=False,

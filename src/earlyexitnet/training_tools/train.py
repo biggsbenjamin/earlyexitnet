@@ -277,6 +277,7 @@ class Trainer:
                 results = self.model(xb)
                 # calculate and back prop loss for exit(s)
                 loss_calc_f(opt,results,yb)
+                
             # update training loss and accuracy averages
             tr_loss_avg = self.train_loss_trk.get_avg(
                 return_list=True)
@@ -328,6 +329,7 @@ class Trainer:
 
                     if isinstance(lr_sched, optim.lr_scheduler.ReduceLROnPlateau):
                         lr_sched.step(val_accu_avg)
+                        print(f"Last lr:{lr_sched.get_last_lr()}")
 
                 # debugging print - TODO log this rather than print
                 print("raw v loss:{} v accu:{}".format(val_loss_avg,val_accu_avg))
@@ -346,9 +348,11 @@ class Trainer:
 
                 #### validation and saving loop ####
 
-            # add lr sched step here for adam-wd
-            if isinstance(lr_sched, optim.lr_scheduler.MultiplicativeLR):
+            # add lr sched step here for adam-wd with mult lr or cosine
+            if isinstance(lr_sched, optim.lr_scheduler.MultiplicativeLR) or \
+                    isinstance(lr_sched, optim.lr_scheduler.CosineAnnealingWarmRestarts):
                 lr_sched.step()
+                print(f"Last lr:{lr_sched.get_last_lr()}")
 
             # Early-terminate training when accuracy stops improving
             # TODO add this back in
