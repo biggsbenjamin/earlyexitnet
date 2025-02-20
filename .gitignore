@@ -10,6 +10,7 @@ net_graph.jpg.pdf
 *.pyc
 **/old/**
 *.npy
+**/.ipynb_checkpoints/*
 
 **/data/
 

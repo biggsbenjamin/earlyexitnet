@@ -145,7 +145,8 @@ def base2_subMax_softmax_fixed(
 
     # compute the exponentiation operation by
     # shifting the ones defined earlier right by the amount defined in exponents
-    # this is done by shifting the underlying representation as fxp doesn't support this operation
+    # this is done by shifting the underlying representation
+    # as fxp doesn't support this operation
     #exp_zs.val >>= exponents.astype(np.uint64)
     exp_zs.val >>= exponents.get_val().astype(np.uint64)
     #exp_zs.info()
