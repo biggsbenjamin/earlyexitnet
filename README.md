@@ -8,8 +8,8 @@ Recommeded conda/miniconda for package management.
 1. Set up a python 3.9 environment and activate it:
 
 ```
-conda create -n py39 python=3.9
-conda activate py39
+conda create -n py312 python=3.12
+conda activate py312
 ```
 
 2. Upgrade to latest version of pip.
@@ -24,6 +24,8 @@ conda activate py39
 - torch 1.13.1 (for CUDA >=11.6)
 - onnx 1.8.1 
 - onnxruntime 1.7.0 
+
+> **Note** The versions required for keeping up to date with pytorch and GPU usage mean that the onnx emission may no longer work. This is being tested and new versions verified soon.
 
 This version of ONNX in python is old so requires protobuf compiler to be installed.
 
