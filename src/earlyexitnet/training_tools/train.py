@@ -45,7 +45,7 @@ from datetime import datetime as dt
 def get_num_correct(preds, labels):
     return preds.argmax(dim=1).eq(labels).sum().item()
 
-def get_model(model_str):
+def get_model(model_str, dataset):
     #set up the model specified in args
     if model_str == 'lenet':
         # FIXME
@@ -73,9 +73,20 @@ def get_model(model_str):
     elif model_str == 'resnet8':
         model = ResNet8()
     elif model_str == 'resnet8_bb':
-        model = ResNet8_backbone()
+        if dataset == 'cifar10':
+            model = ResNet8_backbone(dataset)
+        elif dataset == 'cifar100':
+            model = ResNet8_backbone(dataset)
+        else:
+            raise NotImplementedError(f"{dataset} dataset not supported for ResNet8_backbone")
     elif model_str == 'resnet8_2ee':
         model = ResNet8_2EE()
+        if dataset == 'cifar10':
+            model = ResNet8_2EE(dataset)
+        elif dataset == 'cifar100':
+            model = ResNet8_2EE(dataset)
+        else:
+            raise NotImplementedError(f"{dataset} dataset not supported for ResNet8_2EE")
     else:
         raise NameError("Model not supported, check name:",model_str)
     print("Model done:", model_str)
@@ -277,7 +288,7 @@ class Trainer:
                 results = self.model(xb)
                 # calculate and back prop loss for exit(s)
                 loss_calc_f(opt,results,yb)
-                
+
             # update training loss and accuracy averages
             tr_loss_avg = self.train_loss_trk.get_avg(
                 return_list=True)

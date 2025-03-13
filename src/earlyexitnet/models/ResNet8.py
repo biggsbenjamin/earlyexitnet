@@ -161,12 +161,20 @@ class ResBlock(nn.Module):
         return fwd
 
 class ResNet8_backbone(nn.Module):
-    def __init__(self):
+    def __init__(self, dataset='cifar10'):
         super(ResNet8_backbone, self).__init__()
         self.exit_num=1
 
+        if dataset == 'cifar10':
+            self.num_classes=10
+        elif dataset == 'cifar100':
+            self.num_classes=100
+        else:
+            raise NotImplementedError(f"Not implemented for dataset: {dataset}")
+
+        print(f"Using {self.num_classes} classes")
+
         self.input_size=32
-        self.num_classes=10
         self.in_chans=16
 
         c0 = nn.Conv2d(3, self.in_chans,
@@ -287,8 +295,8 @@ class IntrClassif(nn.Module):
 
 class ResNet8_2EE(ResNet8_backbone):
     # basic early exit network for resnet8
-    def __init__(self):
-        super(ResNet8_2EE, self).__init__()
+    def __init__(self, dataset='cifar10'):
+        super(ResNet8_2EE, self).__init__(dataset)
 
         # NOTE structure:
         # init conv -> exit1

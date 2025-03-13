@@ -1,8 +1,8 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
+from torch import nn
+from torch import optim
 from torch.utils.data import DataLoader, Dataset, TensorDataset, random_split
-import torchvision
+import torchvision as tv
 import torchvision.transforms as transforms
 
 import os
@@ -91,7 +91,7 @@ class DataColl:
                         transforms.ToTensor(),
                         transforms.Normalize(mean, std)])
             # normalised set
-            self.full_train_set = torchvision.datasets.MNIST('../data/mnist',
+            self.full_train_set = tv.datasets.MNIST('../data/mnist',
                     download=True, train=True, transform=tfs_norm)
 
         if self.validation_split is not None:
@@ -160,10 +160,10 @@ class MNISTDataColl(DataColl):
         #standard transform for MNIST
         self.tfs = transforms.Compose([transforms.ToTensor()])
         #full training set, no normalisation
-        self.full_train_set = torchvision.datasets.MNIST('../data/mnist',
+        self.full_train_set = tv.datasets.MNIST('../data/mnist',
             download=True, train=True, transform=self.tfs)
         #full testing set
-        self.full_test_set = torchvision.datasets.MNIST('../data/mnist',
+        self.full_test_set = tv.datasets.MNIST('../data/mnist',
                 download=True, train=False, transform=self.tfs)
 
 class CIFAR10DataColl(DataColl):
@@ -191,7 +191,7 @@ class CIFAR10DataColl(DataColl):
                 ]
         self.tfs_train = transforms.Compose(tfs_list)
         #full training set
-        self.full_train_set = torchvision.datasets.CIFAR10('../data/cifar10',
+        self.full_train_set = tv.datasets.CIFAR10('../data/cifar10',
             download=True, train=True, transform=self.tfs_train)
 
         # test data set
@@ -201,20 +201,85 @@ class CIFAR10DataColl(DataColl):
         #tfs_test_list.append(transforms.Normalize(mean=mean,std=std))
         self.tfs_test = transforms.Compose(tfs_test_list)
         #full testing set
-        self.full_test_set = torchvision.datasets.CIFAR10('../data/cifar10',
+        self.full_test_set = tv.datasets.CIFAR10('../data/cifar10',
                 download=True, train=False, transform=self.tfs_test)
 
 class CIFAR100DataColl(DataColl):
     def _load_sets(self):
         #child version of function, CIFAR100 specific
-        #standard transform for CIFAR100
+        #transform for CIFAR100 training
+        tfs_list = [transforms.ToTensor()]
+        # multiply values by 255
+        custom_trfm = transforms.Lambda(lambda x: x*255)
+        mean=(0.5070751592371323, 0.48654887331495095, 0.4409178433670343)
+        std=(0.2673342858792401, 0.2564384629170883, 0.27615047132568404)
+        # FIXME is the scaling the *255? work out if this is true
+        # confusing myself with double negatives, value is default False
+        # no_scaling defaults to true in cli, when TRUE the values are
+        # NOT SCALED DOWN to between 0,1
+        if self.no_scaling:
+            tfs_list.append(custom_trfm)
+            mean=(0.5070751592371323*255, 0.48654887331495095*255, 0.4409178433670343*255)
+            std=(0.2673342858792401*15.968719, 0.2564384629170883*15.968719, 0.27615047132568404*15.968719)
+
+        tfs_list = tfs_list + [
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(degrees=15),
+            transforms.ColorJitter(brightness=0.5),
+            #transforms.Normalize(mean=mean,std=std)
+            ]
+
+        self.tfs_train = transforms.Compose(tfs_list)
+        #full training set
+        self.full_train_set = tv.datasets.CIFAR100('../data/CIFAR100',
+            download=True, train=True, transform=self.tfs_train)
+
+        # test data set
+        tfs_test_list = [transforms.ToTensor()]
+        if self.no_scaling:
+            tfs_test_list.append(custom_trfm)
+        #tfs_test_list.append(transforms.Normalize(mean=mean,std=std))
+        self.tfs_test = transforms.Compose(tfs_test_list)
+        #full testing set
+        self.full_test_set = tv.datasets.CIFAR100('../data/cifar100',
+                download=True, train=False, transform=self.tfs_test)
+
+class TinyImagenetDataColl(DataColl):
+    def _load_sets(self):
+        #child version of function, CIFAR100 specific
         self.tfs = transforms.Compose([transforms.ToTensor()])
         #full training set, no normalisation
-        self.full_train_set = torchvision.datasets.CIFAR100('../data/cifar100',
-            download=True, train=True, transform=self.tfs)
+        self.full_train_set = tv.datasets.ImageFolder(
+            '../data/tiny-imagenet', transform=self.tfs)
+
+        # FIXME this does not pull the test set at the moment
         #full testing set
-        self.full_test_set = torchvision.datasets.CIFAR100('../data/cifar100',
-                download=True, train=False, transform=self.tfs)
+        self.full_test_set = tv.datasets.ImageFolder(
+            '../data/tiny-imagenet', transform=self.tfs)
+
+# Setup function to create dataloaders for image datasets
+def generate_dataloader(data, name, transform):
+    if data is None:
+        return None
+
+    # Read image files to pytorch dataset using ImageFolder, a generic data
+    # loader where images are in format root/label/filename
+    # See https://pytorch.org/vision/stable/datasets.html
+    if transform is None:
+        dataset = tv.datasets.ImageFolder(data, transform=torch.ToTensor())
+    else:
+        dataset = tv.datasets.ImageFolder(data, transform=transform)
+
+    #FIXME
+    kwargs = {"pin_memory": True, "num_workers": 1}
+
+    # Wrap image dataset (defined above) in dataloader
+    dataloader = DataLoader(dataset, batch_size=batch_size,
+                            shuffle=(name=="train"),
+                            **kwargs)
+
+    return dataloader
 
 ################################
 ######   Stat functions   ######
