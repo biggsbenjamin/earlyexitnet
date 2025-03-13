@@ -2,19 +2,18 @@
 Methods to do things with onnx models into pytorch land
 """
 
+import os
+import argparse
 import onnx
 import onnxruntime
-from onnx import numpy_helper
-from onnx import version_converter, helper
 
 import torch
 import numpy as np
-import os
-import argparse
 import matplotlib.pyplot as plt
 
+from onnx import numpy_helper, version_converter, helper
 from earlyexitnet.tools import path_check,save_model,CIFAR10DataColl
-from earlyexitnet.models.ResNet8 import ResNet8
+from earlyexitnet.models.ResNet8 import ResNet8, ResNet8_backbone, ResNet8_2EE
 
 """
 Method to export pytorch models to onnx.
