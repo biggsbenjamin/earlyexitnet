@@ -224,7 +224,9 @@ class ResNet8_backbone(nn.Module):
         for b in self.backbone:
             y = b(y)
         y = self.end_layers(y)
-        return [y]
+        # NOTE removing brackets as this might break onnx generation
+        # FIXME this probably WILL break pytorch usage...
+        return y
 
 # Early-Exit ResNet8 and classifier structures
 ## FlexDNN Classifier

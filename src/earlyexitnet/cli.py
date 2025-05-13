@@ -401,7 +401,7 @@ def train_n_test(args):
     notes_path = os.path.join(save_path,'notes.txt')
     with open(notes_path, 'w') as notes:
         notes.write(f"bb epochs {args.bb_epochs}, jt epochs {args.jt_epochs}\n")
-        notes.write("Training batch-size {batch_size_train}, Test batch-size \
+        notes.write(f"Training batch-size {batch_size_train}, Test batch-size \
                     {batch_size_test}\n")
         notes.write(f"Optimiser bb info: {net_trainer.backbone_opt_cfg}\n")
         notes.write(f"Optimiser jt info: {net_trainer.joint_opt_cfg}\n")
@@ -537,13 +537,10 @@ def main():
 
     # parse the arguments
     args = parser.parse_args()
-    if args.trained_model_path is not None and (args.bb_epochs==0 and args.jt_epochs==0):
-        model = test_only(args)
-        model_path = args.trained_model_path
-    else:
-        model,model_path = train_n_test(args)
 
     if args.generate_onnx is not None:
+        model_path = args.trained_model_path
+        model = get_model(args.model_name, args.dataset)
         # get input shape for graph gen
         if args.dataset == 'mnist':
             shape = [1,28,28]
@@ -558,6 +555,13 @@ def main():
         to_onnx(model,shape,batch_size=1,
                 path=args.generate_onnx,
                 fname=fname)
+        return
+
+    if args.trained_model_path is not None and (args.bb_epochs==0 and args.jt_epochs==0):
+        model = test_only(args)
+        model_path = args.trained_model_path
+    else:
+        model,model_path = train_n_test(args)
 
 if __name__ == "__main__":
     main()
