@@ -6,4 +6,4 @@
 
 #python -m earlyexitnet.cli --dataset cifar10 -m resnet8_2ee -mp ./trained_models/resnet8_2ee_230721_jnt-frm-scrtch.pth -t1 0.8 -entr 0.65 -gpu 0 -nw 8 -bste 500 -cf 0 1
 
-python -m earlyexitnet.cli --dataset cifar10 -m resnet8_2ee -mp ./outputs/resnet8_2ee/jnt_fr_exstng2025-03-12_204250/bbexst-joint-e100-2025-03-12_210947.pth -t1 0.65 -entr 0.65 -gpu 0 -nw 16 -bste 1000 -cf 0 1
+python -m earlyexitnet.cli --dataset cifar10 -m resnet8_2ee -mp ./outputs/resnet8_2ee/jnt_fr_exstng2025-03-12_204250/bbexst-joint-e100-2025-03-12_210947.pth -t1 0.75 -entr 0.65 -gpu 0 -nw 16 -bste 1000 -cf 0 1
